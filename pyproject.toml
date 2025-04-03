@@ -1,7 +1,21 @@
 [project]
 name = "daqmin"
 version = "0.1.0"
-description = "Add your description here"
+description = "Minimal inspector for NI DAQmx"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "nidaqmx>=1.0.2",
+    "pyside6>=6.8.3",
+    "qtpy>=2.4.3",
+]
+
+[project.scripts]
+daqmin = "daqmin.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 79

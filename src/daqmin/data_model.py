@@ -154,9 +154,16 @@ class Attribute(Node):
 class PhysChan(Node):
     """A DAQmx Physical Channel."""
 
-    def __init__(self, name: str, parent: Node) -> None:
-        self._name = name
-        self._attributes = []  # TODO
+    def __init__(
+        self,
+        daqmx_phys_chan: nidaqmx.system.physical_channel.PhysicalChannel,
+        parent: Node,
+    ) -> None:
+        self._name = daqmx_phys_chan.name
+        self._attributes = [
+            Attribute(daqmx_phys_chan, md, self)
+            for md in attributes.attrs_for_target("PhysicalChannel")
+        ]
         self._parent = parent
 
     @override
@@ -191,7 +198,7 @@ class PhysChans(Node):
     ) -> None:
         self._name = title
         self._phys_chans = tuple(
-            PhysChan(phys_chan.name, self) for phys_chan in phys_chans
+            PhysChan(phys_chan, self) for phys_chan in phys_chans
         )
         self._parent = parent
 
@@ -229,7 +236,7 @@ class Device(Node):
         self._daqmx_device = daqmx_device
         self._attributes = [
             Attribute(daqmx_device, md, self)
-            for md in attributes.device_attrs()
+            for md in attributes.attrs_for_target("Device")
         ]
         for i, attr in enumerate(self._attributes):
             if attr.name() == "ai_physical_chans":

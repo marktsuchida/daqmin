@@ -1,10 +1,7 @@
-from typing import override
 from . import data_model, ui_model
 from qtpy import QtWidgets
 from qtpy.QtCore import Qt
 import sys
-
-
 
 
 def main():

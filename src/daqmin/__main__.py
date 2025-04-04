@@ -1,5 +1,5 @@
 from . import data_model, ui_model
-from qtpy import QtWidgets
+from qtpy import QtCore, QtWidgets
 from qtpy.QtCore import Qt
 import sys
 
@@ -16,6 +16,8 @@ def main():
     tree_view.setModel(uimodel)
     tree_view.setColumnWidth(0, 256)
     tree_view.setColumnWidth(1, 256)
+
+    tree_view.expandRecursively(QtCore.QModelIndex(), 2)
 
     details_widget = QtWidgets.QWidget()  # TODO
 

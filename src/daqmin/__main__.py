@@ -14,19 +14,19 @@ def main():
 
     tree_view = QtWidgets.QTreeView()
     tree_view.setModel(uimodel)
-    tree_view.setColumnWidth(0, 160)
-    tree_view.setColumnWidth(1, 160)
+    tree_view.setColumnWidth(0, 256)
+    tree_view.setColumnWidth(1, 256)
 
     details_widget = QtWidgets.QWidget()  # TODO
 
     splitter = QtWidgets.QSplitter(Qt.Horizontal)
     splitter.addWidget(tree_view)
     splitter.addWidget(details_widget)
-    splitter.setSizes((320, 480))
+    splitter.setSizes((512, 512))
 
     window = QtWidgets.QMainWindow()
     window.setWindowTitle("DAQMIN")
-    window.resize(800, 600)
+    window.resize(1024, 600)
     window.setCentralWidget(splitter)
 
     window.show()

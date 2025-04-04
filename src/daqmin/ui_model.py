@@ -75,7 +75,12 @@ class ItemModel(QtCore.QAbstractItemModel, data_model.Observer):
             if index.column() == 0:
                 return item.name()
             if isinstance(item, data_model.Attribute) and index.column() == 1:
-                return item.get()
+                value, error = item.get()
+                return (
+                    str(value)
+                    if value is not None
+                    else str(error).split("\n", 1)[0]
+                )
             return None
 
     @override

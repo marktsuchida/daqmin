@@ -1,8 +1,10 @@
 import time
-from typing import Self, override
+from typing import Any, Self, override
 import warnings
 
 import nidaqmx
+
+from . import attributes
 
 
 class Node:
@@ -87,18 +89,15 @@ class Attribute(Node):
 
     def __init__(
         self,
-        name: str,
-        type_: type,
-        *,
-        getter,
-        setter=None,
-        resetter=None,
+        target: Any,
+        metadata: dict[str, Any],
+        parent: Node,
     ) -> None:
-        self._name = name
-        self._type = type
-        self._getter = getter
-        self._setter = setter
-        self._resetter = resetter
+        self._target = target
+        self._metadata = metadata
+        self._prop_name = metadata["py_name"]
+
+        self._parent = parent
 
         self._cached_value = None
         self._cached_error = None
@@ -108,7 +107,7 @@ class Attribute(Node):
         if self._cached_timestamp is not None:
             return
         try:
-            self._cached_value = self._getter()
+            self._cached_value = getattr(self._target, self._prop_name)
             self._cached_error = None
         except Exception as e:
             self._cached_value = None
@@ -125,23 +124,15 @@ class Attribute(Node):
 
     def get(self):
         self._ensure_cached()
-        if self._cached_value is not None:
-            return self._cached_value
-        if self._cached_error is not None:
-            raise self._cached_error
-        assert False
+        return (self._cached_value, self._cached_error)
 
     def set(self, value) -> None:
-        self._setter(value)
-        self.invalidate_cache()
-
-    def reset(self) -> None:
-        self._resetter()
+        setattr(self._target, self._prop_name, value)
         self.invalidate_cache()
 
     @override
     def name(self) -> str:
-        return self._name
+        return self._prop_name
 
     @override
     def parent(self) -> Node:
@@ -236,33 +227,51 @@ class Device(Node):
     ) -> None:
         self._name = name
         self._daqmx_device = daqmx_device
-        self._phys_chan_collections = [
-            PhysChans(
-                "AI Physical Channels",
-                list(daqmx_device.ai_physical_chans),
-                self,
-            ),
-            PhysChans(
-                "AO Physical Channels",
-                list(daqmx_device.ao_physical_chans),
-                self,
-            ),
-            PhysChans(
-                "CI Physical Channels",
-                list(daqmx_device.ci_physical_chans),
-                self,
-            ),
-            PhysChans(
-                "CO Physical Channels",
-                list(daqmx_device.co_physical_chans),
-                self,
-            ),
-            PhysChans("DI Ports", list(daqmx_device.di_ports), self),
-            PhysChans("DO Ports", list(daqmx_device.do_ports), self),
-            PhysChans("DI Lines", list(daqmx_device.di_lines), self),
-            PhysChans("DO Lines", list(daqmx_device.do_lines), self),
+        self._attributes = [
+            Attribute(daqmx_device, md, self)
+            for md in attributes.device_attrs()
         ]
-        self._attributes = []  # TODO
+        for i, attr in enumerate(self._attributes):
+            if attr.name() == "ai_physical_chans":
+                self._attributes[i] = PhysChans(
+                    attr.name(),
+                    list(daqmx_device.ai_physical_chans),
+                    self,
+                )
+            elif attr.name() == "ao_physical_chans":
+                self._attributes[i] = PhysChans(
+                    attr.name(),
+                    list(daqmx_device.ao_physical_chans),
+                    self,
+                )
+            elif attr.name() == "di_lines":
+                self._attributes[i] = PhysChans(
+                    attr.name(), list(daqmx_device.di_lines), self
+                )
+            elif attr.name() == "di_ports":
+                self._attributes[i] = PhysChans(
+                    attr.name(), list(daqmx_device.di_ports), self
+                )
+            elif attr.name() == "do_lines":
+                self._attributes[i] = PhysChans(
+                    attr.name(), list(daqmx_device.do_lines), self
+                )
+            elif attr.name() == "do_ports":
+                self._attributes[i] = PhysChans(
+                    attr.name(), list(daqmx_device.do_ports), self
+                )
+            elif attr.name() == "ci_physical_chans":
+                self._attributes[i] = PhysChans(
+                    attr.name(),
+                    list(daqmx_device.ci_physical_chans),
+                    self,
+                )
+            elif attr.name() == "co_physical_chans":
+                self._attributes[i] = PhysChans(
+                    attr.name(),
+                    list(daqmx_device.co_physical_chans),
+                    self,
+                )
         self._parent = parent
 
     @override
@@ -275,17 +284,15 @@ class Device(Node):
 
     @override
     def children(self) -> tuple[Node, ...]:
-        return tuple(self._phys_chan_collections + self._attributes)
+        return tuple(self._attributes)
 
     @override
     def num_children(self) -> int:
-        return len(self._phys_chan_collections) + len(self._attributes)
+        return len(self._attributes)
 
     @override
     def child_index(self, child: Node) -> int:
-        if child in self._phys_chan_collections:
-            return self._phys_chan_collections.index(child)
-        return len(self._phys_chan_collections) + self._attributes.index(child)
+        return self._attributes.index(child)
 
 
 class Devices(Node):

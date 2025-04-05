@@ -137,6 +137,37 @@ def read_enums(enum_metadata):
     )
 
 
+def patch_attrs(attrs) -> None:
+    # The provided metadata has DaqSystem (an internall Python class?), whose
+    # attributes are slightly different from the Python API's System class.
+    daqsys_attrs = attrs.pop("DaqSystem")
+    sys_attrs = [
+        {
+            "category": "System",
+            "gettable": True,
+            "is_list": False,
+            "py_name": "driver_version",
+            "py_type": "DriverVersion",
+            "resettable": False,
+            "settable": False,
+            "target": "System",
+        }
+    ]
+    for attr in daqsys_attrs:
+        if attr["py_name"] == "global_chans":
+            attr["py_name"] = "global_channels"
+        elif attr["py_name"] == "dev_names":
+            attr["py_name"] = "devices"
+        elif attr["py_name"] in (
+            "nidaq_major_version",
+            "nidaq_minor_version",
+            "nidaq_update_version",
+        ):
+            continue
+        sys_attrs.append(attr)
+    attrs["System"] = sys_attrs
+
+
 TARGETS = (
     "AIChannel",
     "AOChannel",
@@ -197,6 +228,7 @@ def generate(srcroot: Path) -> None:
     attr_mod = import_from_path("attributes", md_path / "attributes.py")
     attr_metadata = attr_mod.attributes
     attr_cooked = {t: read_attrs_for_target(attr_metadata, t) for t in TARGETS}
+    patch_attrs(attr_cooked)
     with open(dest / "attrs.yaml", "w") as f:
         print(FILE_HEADER, file=f)
         yaml.dump(attr_cooked, f, width=1024)

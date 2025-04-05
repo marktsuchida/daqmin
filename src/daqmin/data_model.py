@@ -315,7 +315,7 @@ class Devices(Node):
 
     @override
     def name(self) -> str:
-        return f"Devices ({len(self._cached_devices)})"
+        return f"devices ({len(self._cached_devices)})"
 
     @override
     def parent(self) -> Node:
@@ -379,10 +379,14 @@ class System(Node):
 
     def __init__(self, parent: Node) -> None:
         self._daqmx_system = nidaqmx.system.System.local()
-        self._attrs = []  # TODO
-
-        self._devices = Devices(self._daqmx_system, self)
-        # TODO Persisted channels, tasks, and scales
+        self._attrs = [
+            Attribute(self._daqmx_system, md, self)
+            for md in attributes.attrs_for_target("System")
+        ]
+        for i, attr in enumerate(self._attrs):
+            if attr.name() == "devices":
+                self._attrs[i] = Devices(self._daqmx_system, self)
+            # TODO Persisted channels, tasks, and scales
 
         self._parent = parent
 
@@ -396,23 +400,14 @@ class System(Node):
 
     @override
     def children(self) -> tuple[Node, ...]:
-        return tuple(
-            self._attrs
-            + [
-                self._devices,
-                # TODO Persisted channels, tasks, and scales
-            ]
-        )
+        return tuple(self._attrs)
 
     @override
     def num_children(self) -> int:
-        return len(self._attrs) + 1  # TODO
+        return len(self._attrs)
 
     @override
     def child_index(self, child: Node) -> int:
-        if child is self._devices:
-            return len(self._attrs)
-        # TODO more
         return self._attrs.index(child)
 
 

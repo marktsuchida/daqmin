@@ -228,51 +228,28 @@ class Device(Node):
         super().__init__(parent)
         self._name = name
         self._daqmx_device = daqmx_device
-        self._attributes = [
-            Attribute(daqmx_device, md, self)
+
+        def make_child(daqmx_device, metadata, parent):
+            name = metadata["py_name"]
+            if name in {
+                "ai_physical_chans",
+                "ao_physical_chans",
+                "di_lines",
+                "di_ports",
+                "do_lines",
+                "do_ports",
+                "ci_physical_chans",
+                "co_physical_chans",
+            }:
+                return PhysChans(
+                    list(getattr(daqmx_device, name)), metadata, parent
+                )
+            return Attribute(daqmx_device, metadata, parent)
+
+        self._children = [
+            make_child(daqmx_device, md, self)
             for md in attributes.attrs_for_target("Device")
         ]
-        for i, attr in enumerate(self._attributes):
-            if attr.name() == "ai_physical_chans":
-                self._attributes[i] = PhysChans(
-                    list(daqmx_device.ai_physical_chans),
-                    attr.metadata(),
-                    self,
-                )
-            elif attr.name() == "ao_physical_chans":
-                self._attributes[i] = PhysChans(
-                    list(daqmx_device.ao_physical_chans),
-                    attr.metadata(),
-                    self,
-                )
-            elif attr.name() == "di_lines":
-                self._attributes[i] = PhysChans(
-                    list(daqmx_device.di_lines), attr.metadata(), self
-                )
-            elif attr.name() == "di_ports":
-                self._attributes[i] = PhysChans(
-                    list(daqmx_device.di_ports), attr.metadata(), self
-                )
-            elif attr.name() == "do_lines":
-                self._attributes[i] = PhysChans(
-                    list(daqmx_device.do_lines), attr.metadata(), self
-                )
-            elif attr.name() == "do_ports":
-                self._attributes[i] = PhysChans(
-                    list(daqmx_device.do_ports), attr.metadata(), self
-                )
-            elif attr.name() == "ci_physical_chans":
-                self._attributes[i] = PhysChans(
-                    list(daqmx_device.ci_physical_chans),
-                    attr.metadata(),
-                    self,
-                )
-            elif attr.name() == "co_physical_chans":
-                self._attributes[i] = PhysChans(
-                    list(daqmx_device.co_physical_chans),
-                    attr.metadata(),
-                    self,
-                )
 
     @override
     def name(self) -> str:
@@ -280,15 +257,15 @@ class Device(Node):
 
     @override
     def children(self) -> tuple[Node, ...]:
-        return tuple(self._attributes)
+        return tuple(self._children)
 
     @override
     def num_children(self) -> int:
-        return len(self._attributes)
+        return len(self._children)
 
     @override
     def child_index(self, child: Node) -> int:
-        return self._attributes.index(child)
+        return self._children.index(child)
 
 
 class Devices(Node):
@@ -369,16 +346,18 @@ class System(Node):
     def __init__(self, parent: Node) -> None:
         super().__init__(parent)
         self._daqmx_system = nidaqmx.system.System.local()
-        self._attrs = [
-            Attribute(self._daqmx_system, md, self)
+
+        def make_child(daqmx_system, metadata, parent):
+            name = metadata["py_name"]
+            if name == "devices":
+                return Devices(daqmx_system, metadata, parent)
+            # TODO Persisted channels, tasks, and scales
+            return Attribute(daqmx_system, metadata, self)
+
+        self._children = [
+            make_child(self._daqmx_system, md, self)
             for md in attributes.attrs_for_target("System")
         ]
-        for i, attr in enumerate(self._attrs):
-            if attr.name() == "devices":
-                self._attrs[i] = Devices(
-                    self._daqmx_system, attr.metadata(), self
-                )
-            # TODO Persisted channels, tasks, and scales
 
     @override
     def name(self) -> str:
@@ -386,15 +365,15 @@ class System(Node):
 
     @override
     def children(self) -> tuple[Node, ...]:
-        return tuple(self._attrs)
+        return tuple(self._children)
 
     @override
     def num_children(self) -> int:
-        return len(self._attrs)
+        return len(self._children)
 
     @override
     def child_index(self, child: Node) -> int:
-        return self._attrs.index(child)
+        return self._children.index(child)
 
 
 class ThisProcess(Node):

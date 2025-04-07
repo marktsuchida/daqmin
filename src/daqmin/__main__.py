@@ -10,10 +10,21 @@ def main():
     datamodel = data_model.Root()
     datamodel.refresh_devices()
 
-    uimodel = ui_model.ItemModel(datamodel)
+    raw_model = ui_model.ItemModel(datamodel)
+    proxy_model = QtCore.QSortFilterProxyModel()
+    proxy_model.setSourceModel(raw_model)
+    proxy_model.setFilterKeyColumn(0)
+
+    sort_chkbox = QtWidgets.QCheckBox("Sort")
+
+    def update_sorting(state: int) -> None:
+        enabled = state == Qt.CheckState.Checked.value
+        proxy_model.sort(0 if enabled else -1)
+
+    sort_chkbox.stateChanged.connect(update_sorting)
 
     tree_view = QtWidgets.QTreeView()
-    tree_view.setModel(uimodel)
+    tree_view.setModel(proxy_model)
     tree_view.setColumnWidth(0, 256)
     tree_view.setColumnWidth(1, 256)
 
@@ -26,10 +37,17 @@ def main():
     splitter.addWidget(details_widget)
     splitter.setSizes((512, 512))
 
+    controls_content_layout = QtWidgets.QVBoxLayout()
+    controls_content_layout.addWidget(sort_chkbox)
+    controls_content_layout.addWidget(splitter)
+
+    central_widget = QtWidgets.QWidget()
+    central_widget.setLayout(controls_content_layout)
+
     window = QtWidgets.QMainWindow()
     window.setWindowTitle("DAQMIN")
     window.resize(1024, 600)
-    window.setCentralWidget(splitter)
+    window.setCentralWidget(central_widget)
 
     window.show()
     sys.exit(app.exec_())

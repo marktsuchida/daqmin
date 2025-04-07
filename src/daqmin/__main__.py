@@ -14,6 +14,7 @@ def main():
     proxy_model = ui_model.SortFilterProxyModel()
     proxy_model.setSourceModel(raw_model)
     proxy_model.setFilterKeyColumn(0)
+    proxy_model.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
 
     sort_chkbox = QtWidgets.QCheckBox("Sort")
 

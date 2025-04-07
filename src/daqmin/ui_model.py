@@ -53,6 +53,8 @@ class ItemModel(QtCore.QAbstractItemModel, data_model.Observer):
         with exceptions_logged():
             if not parent.isValid():
                 return self._dataroot.num_children()
+            if parent.column() != 0:
+                return 0
             item = parent.internalPointer()
             return item.num_children()
 
@@ -115,12 +117,7 @@ class ItemModel(QtCore.QAbstractItemModel, data_model.Observer):
         if parent_item is None:
             raise NotImplementedError()  # Shouldn't be getting index of root
         row = parent_item.child_index(item)
-        parent = (
-            QtCore.QModelIndex()
-            if parent_item is self._dataroot
-            else self._item_index(parent_item)
-        )
-        return self.createIndex(row, 0, parent)
+        return self.createIndex(row, 0, parent_item)
 
     @override
     def nodes_about_to_be_inserted(

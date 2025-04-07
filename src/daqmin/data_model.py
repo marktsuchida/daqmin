@@ -335,16 +335,18 @@ class Devices(Node):
             new_devices.append(device)
 
         child_index_range = (0, self.num_children() - 1)
-        self._begin_remove_children(*child_index_range)
-        self._cached_dev_names = []
-        self._cached_devices = []
-        self._end_remove_children(*child_index_range)
+        if child_index_range[1] >= 0:
+            self._begin_remove_children(*child_index_range)
+            self._cached_dev_names = []
+            self._cached_devices = []
+            self._end_remove_children(*child_index_range)
 
         new_index_range = (0, len(new_dev_names) - 1)
-        self._begin_insert_children(*new_index_range)
-        self._cached_dev_names = new_dev_names
-        self._cached_devices = new_devices
-        self._end_insert_children(*new_index_range)
+        if new_index_range[1] >= 0:
+            self._begin_insert_children(*new_index_range)
+            self._cached_dev_names = new_dev_names
+            self._cached_devices = new_devices
+            self._end_insert_children(*new_index_range)
 
 
 class System(Node):
@@ -486,7 +488,7 @@ class Root(Node):
     ) -> None:
         node = self if node is None else node
         for o in self._observers:
-            o.nodes_about_to_be_removeed(node, first, last)
+            o.nodes_about_to_be_removed(node, first, last)
 
     @override
     def _end_remove_children(
@@ -494,4 +496,4 @@ class Root(Node):
     ) -> None:
         node = self if node is None else node
         for o in self._observers:
-            o.nodes_removeed(node, first, last)
+            o.nodes_removed(node, first, last)

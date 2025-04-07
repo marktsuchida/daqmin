@@ -19,6 +19,8 @@ build-backend = "hatchling.build"
 dev = [
     "cjdk>=0.3.0",
     "glom>=24.11.0",
+    "pytest>=8.3.5",
+    "pytest-qt>=4.4.0",
 ]
 
 [project.scripts]

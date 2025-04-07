@@ -10,11 +10,14 @@ from . import attributes
 class Node:
     """Tree node."""
 
+    def __init__(self, parent: Self | None) -> None:
+        self._parent = parent
+
     def name(self) -> str:
         return "Unnamed"
 
     def parent(self) -> Self | None:
-        raise NotImplementedError()
+        return self._parent
 
     def children(self) -> tuple[Self, ...]:
         return ()
@@ -93,11 +96,10 @@ class Attribute(Node):
         metadata: dict[str, Any],
         parent: Node,
     ) -> None:
+        super().__init__(parent)
         self._target = target
         self._metadata = metadata
         self._prop_name = metadata["py_name"]
-
-        self._parent = parent
 
         self._cached_value = None
         self._cached_error = None
@@ -135,10 +137,6 @@ class Attribute(Node):
         return self._prop_name
 
     @override
-    def parent(self) -> Node:
-        return self._parent
-
-    @override
     def children(self) -> tuple[Node, ...]:
         return ()
 
@@ -159,20 +157,16 @@ class PhysChan(Node):
         daqmx_phys_chan: nidaqmx.system.physical_channel.PhysicalChannel,
         parent: Node,
     ) -> None:
+        super().__init__(parent)
         self._name = daqmx_phys_chan.name
         self._attributes = [
             Attribute(daqmx_phys_chan, md, self)
             for md in attributes.attrs_for_target("PhysicalChannel")
         ]
-        self._parent = parent
 
     @override
     def name(self) -> str:
         return self._name
-
-    @override
-    def parent(self) -> Node:
-        return self._parent
 
     @override
     def children(self) -> tuple[Node, ...]:
@@ -196,19 +190,15 @@ class PhysChans(Node):
         phys_chans: list[nidaqmx.system.physical_channel.PhysicalChannel],
         parent: Node,
     ) -> None:
+        super().__init__(parent)
         self._name = title
         self._phys_chans = tuple(
             PhysChan(phys_chan, self) for phys_chan in phys_chans
         )
-        self._parent = parent
 
     @override
     def name(self) -> str:
         return f"{self._name} ({self.num_children()})"
-
-    @override
-    def parent(self) -> Node:
-        return self._parent
 
     @override
     def children(self) -> tuple[Node, ...]:
@@ -232,6 +222,7 @@ class Device(Node):
         daqmx_device: nidaqmx.system.device.Device,
         parent: Node,
     ) -> None:
+        super().__init__(parent)
         self._name = name
         self._daqmx_device = daqmx_device
         self._attributes = [
@@ -279,15 +270,10 @@ class Device(Node):
                     list(daqmx_device.co_physical_chans),
                     self,
                 )
-        self._parent = parent
 
     @override
     def name(self) -> str:
         return self._name
-
-    @override
-    def parent(self) -> Node:
-        return self._parent
 
     @override
     def children(self) -> tuple[Node, ...]:
@@ -308,18 +294,14 @@ class Devices(Node):
     def __init__(
         self, daqmx_system: nidaqmx.system.System, parent: Node
     ) -> None:
+        super().__init__(parent)
         self._daqmx_system = daqmx_system
         self._cached_dev_names: list[str] = []
         self._cached_devices: list[Device] = []
-        self._parent = parent
 
     @override
     def name(self) -> str:
         return f"devices ({len(self._cached_devices)})"
-
-    @override
-    def parent(self) -> Node:
-        return self._parent
 
     @override
     def children(self) -> tuple[Node, ...]:
@@ -378,6 +360,7 @@ class System(Node):
     """Container for DAQmx system-wide items."""
 
     def __init__(self, parent: Node) -> None:
+        super().__init__(parent)
         self._daqmx_system = nidaqmx.system.System.local()
         self._attrs = [
             Attribute(self._daqmx_system, md, self)
@@ -388,15 +371,9 @@ class System(Node):
                 self._attrs[i] = Devices(self._daqmx_system, self)
             # TODO Persisted channels, tasks, and scales
 
-        self._parent = parent
-
     @override
     def name(self) -> str:
         return "System"
-
-    @override
-    def parent(self) -> Node:
-        return self._parent
 
     @override
     def children(self) -> tuple[Node, ...]:
@@ -415,16 +392,12 @@ class ThisProcess(Node):
     """Container for DAQmx items beloning to the current process."""
 
     def __init__(self, parent: Node) -> None:
-        self._parent = parent
+        super().__init__(parent)
         # TODO tasks, watchdogs, and scales
 
     @override
     def name(self) -> str:
         return "This Process"
-
-    @override
-    def parent(self) -> Node:
-        return self._parent
 
     @override
     def children(self) -> tuple[Node, ...]:
@@ -455,6 +428,7 @@ class Root(Node):
     # task).
 
     def __init__(self) -> None:
+        super().__init__(None)
         self._system = System(self)
         self._this_proc = ThisProcess(self)
         self._observers = []
@@ -465,10 +439,6 @@ class Root(Node):
             "Name of Root node was accessed; this is probably a programming error"
         )
         return "(Root)"
-
-    @override
-    def parent(self) -> None:
-        return None
 
     @override
     def children(self) -> tuple[Node, ...]:

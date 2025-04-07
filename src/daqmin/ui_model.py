@@ -69,7 +69,7 @@ class ItemModel(QtCore.QAbstractItemModel, data_model.Observer):
             if not index.isValid():
                 return None
 
-            if role == Qt.DisplayRole:
+            if role in (Qt.DisplayRole, Qt.ToolTipRole):
                 item = index.internalPointer()
                 if index.column() == 0:
                     return item.name()
@@ -81,7 +81,11 @@ class ItemModel(QtCore.QAbstractItemModel, data_model.Observer):
                     return (
                         str(value)
                         if value is not None
-                        else str(error).split("\n", 1)[0]
+                        else (
+                            str(error).split("\n", 1)[0]  # First line only
+                            if role == Qt.DisplayRole
+                            else str(error)
+                        )
                     )
             elif role == Qt.FontRole and index.column() == 0:
                 item = index.internalPointer()

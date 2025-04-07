@@ -27,7 +27,12 @@ def main():
 
     filter_line = QtWidgets.QLineEdit()
     filter_line.setClearButtonEnabled(True)
-    filter_line.textChanged.connect(proxy_model.setFilterRegularExpression)
+
+    def update_filter_re(regex: str) -> None:
+        if QtCore.QRegularExpression(regex).isValid():
+            proxy_model.setFilterRegularExpression(regex)
+
+    filter_line.textChanged.connect(update_filter_re)
 
     sort_filter_layout = QtWidgets.QHBoxLayout()
     sort_filter_layout.addWidget(sort_chkbox)

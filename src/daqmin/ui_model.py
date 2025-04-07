@@ -145,3 +145,27 @@ class ItemModel(QtCore.QAbstractItemModel, data_model.Observer):
         self, parent: data_model.Node, first: int, last: int
     ) -> None:
         self.endRemoveRows()
+
+
+class SortFilterProxyModel(QtCore.QSortFilterProxyModel):
+    @override
+    def filterAcceptsRow(
+        self, source_row: int, source_parent: QtCore.QModelIndex
+    ) -> bool:
+        source_index = self.sourceModel().index(source_row, 0, source_parent)
+        source_data = self.sourceModel().data(
+            source_index, Qt.ItemDataRole.DisplayRole
+        )
+        if (
+            source_data
+            and self.filterRegularExpression()
+            .match(str(source_data))
+            .hasMatch()
+        ):
+            return True
+        if not self.sourceModel().hasChildren(source_index):
+            return False
+        for i in range(self.sourceModel().rowCount(source_index)):
+            if self.filterAcceptsRow(i, source_index):
+                return True
+        return False

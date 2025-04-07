@@ -11,7 +11,7 @@ def main():
     datamodel.refresh_devices()
 
     raw_model = ui_model.ItemModel(datamodel)
-    proxy_model = QtCore.QSortFilterProxyModel()
+    proxy_model = ui_model.SortFilterProxyModel()
     proxy_model.setSourceModel(raw_model)
     proxy_model.setFilterKeyColumn(0)
 

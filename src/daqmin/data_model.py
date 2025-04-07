@@ -140,6 +140,10 @@ class Attribute(Node):
 
     @override
     def name(self) -> str:
+        if self._metadata["is_list"]:
+            vals = self.get()[0]
+            if vals is not None:
+                return f"{self._prop_name} ({len(vals)})"
         return self._prop_name
 
     @override

@@ -23,6 +23,17 @@ def main():
 
     sort_chkbox.stateChanged.connect(update_sorting)
 
+    filter_label = QtWidgets.QLabel("Filter:")
+
+    filter_line = QtWidgets.QLineEdit()
+    filter_line.setClearButtonEnabled(True)
+    filter_line.textChanged.connect(proxy_model.setFilterRegularExpression)
+
+    sort_filter_layout = QtWidgets.QHBoxLayout()
+    sort_filter_layout.addWidget(sort_chkbox)
+    sort_filter_layout.addWidget(filter_label)
+    sort_filter_layout.addWidget(filter_line)
+
     tree_view = QtWidgets.QTreeView()
     tree_view.setModel(proxy_model)
     tree_view.setColumnWidth(0, 256)
@@ -38,7 +49,7 @@ def main():
     splitter.setSizes((512, 512))
 
     controls_content_layout = QtWidgets.QVBoxLayout()
-    controls_content_layout.addWidget(sort_chkbox)
+    controls_content_layout.addLayout(sort_filter_layout)
     controls_content_layout.addWidget(splitter)
 
     central_widget = QtWidgets.QWidget()

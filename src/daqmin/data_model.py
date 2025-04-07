@@ -132,6 +132,9 @@ class Attribute(Node):
         setattr(self._target, self._prop_name, value)
         self.invalidate_cache()
 
+    def metadata(self) -> dict[str, Any]:
+        return self._metadata
+
     @override
     def name(self) -> str:
         return self._prop_name
@@ -186,12 +189,12 @@ class PhysChans(Node):
 
     def __init__(
         self,
-        title: str,
         phys_chans: list[nidaqmx.system.physical_channel.PhysicalChannel],
+        metadata: dict[str, Any],
         parent: Node,
     ) -> None:
         super().__init__(parent)
-        self._name = title
+        self._name = metadata["py_name"]
         self._phys_chans = tuple(
             PhysChan(phys_chan, self) for phys_chan in phys_chans
         )
@@ -232,42 +235,42 @@ class Device(Node):
         for i, attr in enumerate(self._attributes):
             if attr.name() == "ai_physical_chans":
                 self._attributes[i] = PhysChans(
-                    attr.name(),
                     list(daqmx_device.ai_physical_chans),
+                    attr.metadata(),
                     self,
                 )
             elif attr.name() == "ao_physical_chans":
                 self._attributes[i] = PhysChans(
-                    attr.name(),
                     list(daqmx_device.ao_physical_chans),
+                    attr.metadata(),
                     self,
                 )
             elif attr.name() == "di_lines":
                 self._attributes[i] = PhysChans(
-                    attr.name(), list(daqmx_device.di_lines), self
+                    list(daqmx_device.di_lines), attr.metadata(), self
                 )
             elif attr.name() == "di_ports":
                 self._attributes[i] = PhysChans(
-                    attr.name(), list(daqmx_device.di_ports), self
+                    list(daqmx_device.di_ports), attr.metadata(), self
                 )
             elif attr.name() == "do_lines":
                 self._attributes[i] = PhysChans(
-                    attr.name(), list(daqmx_device.do_lines), self
+                    list(daqmx_device.do_lines), attr.metadata(), self
                 )
             elif attr.name() == "do_ports":
                 self._attributes[i] = PhysChans(
-                    attr.name(), list(daqmx_device.do_ports), self
+                    list(daqmx_device.do_ports), attr.metadata(), self
                 )
             elif attr.name() == "ci_physical_chans":
                 self._attributes[i] = PhysChans(
-                    attr.name(),
                     list(daqmx_device.ci_physical_chans),
+                    attr.metadata(),
                     self,
                 )
             elif attr.name() == "co_physical_chans":
                 self._attributes[i] = PhysChans(
-                    attr.name(),
                     list(daqmx_device.co_physical_chans),
+                    attr.metadata(),
                     self,
                 )
 
@@ -292,16 +295,20 @@ class Devices(Node):
     """The collection of DAQmx devices on the system."""
 
     def __init__(
-        self, daqmx_system: nidaqmx.system.System, parent: Node
+        self,
+        daqmx_system: nidaqmx.system.System,
+        metadata: dict[str, Any],
+        parent: Node,
     ) -> None:
         super().__init__(parent)
+        self._name = metadata["py_name"]
         self._daqmx_system = daqmx_system
         self._cached_dev_names: list[str] = []
         self._cached_devices: list[Device] = []
 
     @override
     def name(self) -> str:
-        return f"devices ({len(self._cached_devices)})"
+        return f"{self._name} ({len(self._cached_devices)})"
 
     @override
     def children(self) -> tuple[Node, ...]:
@@ -368,7 +375,9 @@ class System(Node):
         ]
         for i, attr in enumerate(self._attrs):
             if attr.name() == "devices":
-                self._attrs[i] = Devices(self._daqmx_system, self)
+                self._attrs[i] = Devices(
+                    self._daqmx_system, attr.metadata(), self
+                )
             # TODO Persisted channels, tasks, and scales
 
     @override

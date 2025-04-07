@@ -3,7 +3,7 @@ import sys
 import traceback
 from typing import Any, override
 from . import data_model
-from qtpy import QtCore
+from qtpy import QtCore, QtWidgets
 from qtpy.QtCore import Qt
 
 
@@ -68,19 +68,27 @@ class ItemModel(QtCore.QAbstractItemModel, data_model.Observer):
         with exceptions_logged():
             if not index.isValid():
                 return None
-            if role != Qt.DisplayRole:
-                return None
 
-            item = index.internalPointer()
-            if index.column() == 0:
-                return item.name()
-            if isinstance(item, data_model.Attribute) and index.column() == 1:
-                value, error = item.get()
-                return (
-                    str(value)
-                    if value is not None
-                    else str(error).split("\n", 1)[0]
-                )
+            if role == Qt.DisplayRole:
+                item = index.internalPointer()
+                if index.column() == 0:
+                    return item.name()
+                if (
+                    isinstance(item, data_model.Attribute)
+                    and index.column() == 1
+                ):
+                    value, error = item.get()
+                    return (
+                        str(value)
+                        if value is not None
+                        else str(error).split("\n", 1)[0]
+                    )
+            elif role == Qt.FontRole and index.column() == 0:
+                item = index.internalPointer()
+                if item.is_writable():
+                    font = QtWidgets.QApplication.font()
+                    font.setBold(True)
+                    return font
             return None
 
     @override

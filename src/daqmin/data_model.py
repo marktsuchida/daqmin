@@ -16,6 +16,9 @@ class Node:
     def name(self) -> str:
         return "Unnamed"
 
+    def is_writable(self) -> bool:
+        return False
+
     def parent(self) -> Self | None:
         return self._parent
 
@@ -138,6 +141,10 @@ class Attribute(Node):
     @override
     def name(self) -> str:
         return self._prop_name
+
+    @override
+    def is_writable(self) -> bool:
+        return self._metadata["settable"]
 
     @override
     def children(self) -> tuple[Node, ...]:

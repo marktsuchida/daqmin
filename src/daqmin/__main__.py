@@ -1,11 +1,24 @@
-from . import data_model, ui_model
-from qtpy import QtCore, QtWidgets
-from qtpy.QtCore import Qt
 import sys
+
+from qtpy.QtCore import QModelIndex, QRegularExpression, Qt
+from qtpy.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QSplitter,
+    QTreeView,
+    QVBoxLayout,
+    QWidget,
+)
+
+from . import data_model, ui_model
 
 
 def main():
-    app = QtWidgets.QApplication(sys.argv)
+    app = QApplication(sys.argv)
 
     datamodel = data_model.Root()
     datamodel.refresh_devices()
@@ -16,7 +29,7 @@ def main():
     proxy_model.setFilterKeyColumn(0)
     proxy_model.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
 
-    sort_chkbox = QtWidgets.QCheckBox("Sort")
+    sort_chkbox = QCheckBox("Sort")
 
     def update_sorting(state: int) -> None:
         enabled = state == Qt.CheckState.Checked.value
@@ -24,44 +37,44 @@ def main():
 
     sort_chkbox.stateChanged.connect(update_sorting)
 
-    filter_label = QtWidgets.QLabel("Filter:")
+    filter_label = QLabel("Filter:")
 
-    filter_line = QtWidgets.QLineEdit()
+    filter_line = QLineEdit()
     filter_line.setClearButtonEnabled(True)
 
     def update_filter_re(regex: str) -> None:
-        if QtCore.QRegularExpression(regex).isValid():
+        if QRegularExpression(regex).isValid():
             proxy_model.setFilterRegularExpression(regex)
 
     filter_line.textChanged.connect(update_filter_re)
 
-    sort_filter_layout = QtWidgets.QHBoxLayout()
+    sort_filter_layout = QHBoxLayout()
     sort_filter_layout.addWidget(sort_chkbox)
     sort_filter_layout.addWidget(filter_label)
     sort_filter_layout.addWidget(filter_line)
 
-    tree_view = QtWidgets.QTreeView()
+    tree_view = QTreeView()
     tree_view.setModel(proxy_model)
     tree_view.setColumnWidth(0, 256)
     tree_view.setColumnWidth(1, 256)
 
-    tree_view.expandRecursively(QtCore.QModelIndex(), 2)
+    tree_view.expandRecursively(QModelIndex(), 2)
 
-    details_widget = QtWidgets.QWidget()  # TODO
+    details_widget = QWidget()  # TODO
 
-    splitter = QtWidgets.QSplitter(Qt.Horizontal)
+    splitter = QSplitter(Qt.Orientation.Horizontal)
     splitter.addWidget(tree_view)
     splitter.addWidget(details_widget)
     splitter.setSizes((512, 512))
 
-    controls_content_layout = QtWidgets.QVBoxLayout()
+    controls_content_layout = QVBoxLayout()
     controls_content_layout.addLayout(sort_filter_layout)
     controls_content_layout.addWidget(splitter)
 
-    central_widget = QtWidgets.QWidget()
+    central_widget = QWidget()
     central_widget.setLayout(controls_content_layout)
 
-    window = QtWidgets.QMainWindow()
+    window = QMainWindow()
     window.setWindowTitle("DAQMIN")
     window.resize(1024, 600)
     window.setCentralWidget(central_widget)

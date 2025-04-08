@@ -2,9 +2,16 @@ import contextlib
 import sys
 import traceback
 from typing import Any, override
+
+from qtpy.QtCore import (
+    QAbstractItemModel,
+    QModelIndex,
+    QSortFilterProxyModel,
+    Qt,
+)
+from qtpy.QtWidgets import QApplication
+
 from . import data_model
-from qtpy import QtCore, QtWidgets
-from qtpy.QtCore import Qt
 
 
 @contextlib.contextmanager
@@ -16,19 +23,17 @@ def exceptions_logged():
         traceback.print_exc()
 
 
-class ItemModel(QtCore.QAbstractItemModel, data_model.Observer):
+class ItemModel(QAbstractItemModel, data_model.Observer):
     def __init__(self, data_model):
         super().__init__()
         self._dataroot = data_model
         self._dataroot.add_observer(self)
 
     @override
-    def index(
-        self, row: int, col: int, parent: QtCore.QModelIndex
-    ) -> QtCore.QModelIndex:
+    def index(self, row: int, col: int, parent: QModelIndex) -> QModelIndex:
         with exceptions_logged():
             if not self.hasIndex(row, col, parent):
-                return QtCore.QModelIndex()
+                return QModelIndex()
             parent_item = (
                 parent.internalPointer()
                 if parent.isValid()
@@ -38,18 +43,18 @@ class ItemModel(QtCore.QAbstractItemModel, data_model.Observer):
             return self.createIndex(row, col, item)
 
     @override
-    def parent(self, index: QtCore.QModelIndex) -> QtCore.QModelIndex:
+    def parent(self, index: QModelIndex) -> QModelIndex:
         with exceptions_logged():
             if not index.isValid():
-                return QtCore.QModelIndex()
+                return QModelIndex()
             item = index.internalPointer().parent()
             if item is self._dataroot:
-                return QtCore.QModelIndex()
+                return QModelIndex()
             row = item.parent().children().index(item)
             return self.createIndex(row, 0, item)
 
     @override
-    def rowCount(self, parent: QtCore.QModelIndex) -> int:
+    def rowCount(self, parent: QModelIndex) -> int:
         with exceptions_logged():
             if not parent.isValid():
                 return self._dataroot.num_children()
@@ -59,19 +64,22 @@ class ItemModel(QtCore.QAbstractItemModel, data_model.Observer):
             return item.num_children()
 
     @override
-    def columnCount(self, parent: QtCore.QModelIndex) -> int:
+    def columnCount(self, parent: QModelIndex) -> int:
         with exceptions_logged():
             return 2
 
     @override
     def data(
-        self, index: QtCore.QModelIndex, role: int = Qt.DisplayRole
+        self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole
     ) -> Any:
         with exceptions_logged():
             if not index.isValid():
                 return None
 
-            if role in (Qt.DisplayRole, Qt.ToolTipRole):
+            if role in (
+                Qt.ItemDataRole.DisplayRole,
+                Qt.ItemDataRole.ToolTipRole,
+            ):
                 item = index.internalPointer()
                 if index.column() == 0:
                     return item.name()
@@ -85,14 +93,14 @@ class ItemModel(QtCore.QAbstractItemModel, data_model.Observer):
                         if value is not None
                         else (
                             str(error).split("\n", 1)[0]  # First line only
-                            if role == Qt.DisplayRole
+                            if role == Qt.ItemDataRole.DisplayRole
                             else str(error)
                         )
                     )
-            elif role == Qt.FontRole and index.column() == 0:
+            elif role == Qt.ItemDataRole.FontRole and index.column() == 0:
                 item = index.internalPointer()
                 if item.is_writable():
-                    font = QtWidgets.QApplication.font()
+                    font = QApplication.font()
                     font.setBold(True)
                     return font
             return None
@@ -102,17 +110,20 @@ class ItemModel(QtCore.QAbstractItemModel, data_model.Observer):
         self,
         section: int,
         orientation: Qt.Orientation,
-        role: int = Qt.DisplayRole,
+        role: int = Qt.ItemDataRole.DisplayRole,
     ) -> Any:
         with exceptions_logged():
-            if orientation == Qt.Horizontal and role == Qt.DisplayRole:
+            if (
+                orientation == Qt.Orientation.Horizontal
+                and role == Qt.ItemDataRole.DisplayRole
+            ):
                 if section == 0:
                     return "Name"
                 if section == 1:
                     return "Value"
             return None
 
-    def _item_index(self, item: data_model.Node) -> QtCore.QModelIndex:
+    def _item_index(self, item: data_model.Node) -> QModelIndex:
         parent_item = item.parent()
         if parent_item is None:
             raise NotImplementedError()  # Shouldn't be getting index of root
@@ -144,10 +155,10 @@ class ItemModel(QtCore.QAbstractItemModel, data_model.Observer):
         self.endRemoveRows()
 
 
-class SortFilterProxyModel(QtCore.QSortFilterProxyModel):
+class SortFilterProxyModel(QSortFilterProxyModel):
     @override
     def filterAcceptsRow(
-        self, source_row: int, source_parent: QtCore.QModelIndex
+        self, source_row: int, source_parent: QModelIndex
     ) -> bool:
         source_index = self.sourceModel().index(source_row, 0, source_parent)
         source_data = self.sourceModel().data(

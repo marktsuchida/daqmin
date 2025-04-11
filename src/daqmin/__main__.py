@@ -1,6 +1,11 @@
 import sys
 
-from qtpy.QtCore import QModelIndex, QRegularExpression, Qt
+from qtpy.QtCore import (
+    QModelIndex,
+    QRegularExpression,
+    QSortFilterProxyModel,
+    Qt,
+)
 from qtpy.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -24,10 +29,11 @@ def main():
     datamodel.refresh_devices()
 
     raw_model = ui_model.ItemModel(datamodel)
-    proxy_model = ui_model.SortFilterProxyModel()
+    proxy_model = QSortFilterProxyModel()
     proxy_model.setSourceModel(raw_model)
     proxy_model.setFilterKeyColumn(0)
     proxy_model.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+    proxy_model.setRecursiveFilteringEnabled(True)
 
     sort_chkbox = QCheckBox("Sort")
 

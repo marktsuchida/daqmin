@@ -3,12 +3,7 @@ import sys
 import traceback
 from typing import Any, override
 
-from qtpy.QtCore import (
-    QAbstractItemModel,
-    QModelIndex,
-    QSortFilterProxyModel,
-    Qt,
-)
+from qtpy.QtCore import QAbstractItemModel, QModelIndex, Qt
 from qtpy.QtWidgets import QApplication
 
 from . import data_model
@@ -153,27 +148,3 @@ class ItemModel(QAbstractItemModel, data_model.Observer):
         self, parent: data_model.Node, first: int, last: int
     ) -> None:
         self.endRemoveRows()
-
-
-class SortFilterProxyModel(QSortFilterProxyModel):
-    @override
-    def filterAcceptsRow(
-        self, source_row: int, source_parent: QModelIndex
-    ) -> bool:
-        source_index = self.sourceModel().index(source_row, 0, source_parent)
-        source_data = self.sourceModel().data(
-            source_index, Qt.ItemDataRole.DisplayRole
-        )
-        if (
-            source_data
-            and self.filterRegularExpression()
-            .match(str(source_data))
-            .hasMatch()
-        ):
-            return True
-        if not self.sourceModel().hasChildren(source_index):
-            return False
-        for i in range(self.sourceModel().rowCount(source_index)):
-            if self.filterAcceptsRow(i, source_index):
-                return True
-        return False

@@ -19,7 +19,7 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from . import data_model, ui_model
+from . import data_model, detail_widgets, ui_model
 
 
 def main():
@@ -48,12 +48,6 @@ def main():
     filter_line = QLineEdit()
     filter_line.setClearButtonEnabled(True)
 
-    def update_filter_re(regex: str) -> None:
-        if QRegularExpression(regex).isValid():
-            proxy_model.setFilterRegularExpression(regex)
-
-    filter_line.textChanged.connect(update_filter_re)
-
     sort_filter_layout = QHBoxLayout()
     sort_filter_layout.addWidget(sort_chkbox)
     sort_filter_layout.addWidget(filter_label)
@@ -62,15 +56,28 @@ def main():
     tree_view = QTreeView()
     tree_view.setModel(proxy_model)
     tree_view.setColumnWidth(0, 256)
-    tree_view.setColumnWidth(1, 256)
 
     tree_view.expandRecursively(QModelIndex(), 2)
 
-    details_widget = QWidget()  # TODO
+    details_controller = detail_widgets.details_controller(proxy_model)
+    tree_view.selectionModel().currentRowChanged.connect(
+        details_controller.on_current_row_changed
+    )
+
+    def update_filter_re(regex: str) -> None:
+        if QRegularExpression(regex).isValid():
+            proxy_model.setFilterRegularExpression(regex)
+            # QItemSelectionModel does not emit a signal when filtering
+            # changes, so we do that manually:
+            details_controller.on_current_row_changed(
+                tree_view.selectionModel().currentIndex()
+            )
+
+    filter_line.textChanged.connect(update_filter_re)
 
     splitter = QSplitter(Qt.Orientation.Horizontal)
     splitter.addWidget(tree_view)
-    splitter.addWidget(details_widget)
+    splitter.addWidget(details_controller.details_widget())
     splitter.setSizes((512, 512))
 
     controls_content_layout = QVBoxLayout()

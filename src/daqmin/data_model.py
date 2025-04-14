@@ -90,10 +90,16 @@ class Node:
 class Visitor:
     """Node visitor interface."""
 
+    def visit_attribute(self, node: "Attribute") -> None:
+        pass
+
     def visit_devices(self, node: "Devices") -> None:
         pass
 
-    def visit_attribute(self, node: "Attribute") -> None:
+    def visit_task(self, node: "Task") -> None:
+        pass
+
+    def visit_tasks(self, node: "Tasks") -> None:
         pass
 
 
@@ -366,12 +372,56 @@ class System(Node):
         return "System"
 
 
+class Task(Node):
+    """A process-scoped DAQmx task."""
+
+    def __init__(self, daqmx_task: nidaqmx.task.Task, parent: Node) -> None:
+        super().__init__(parent, [
+            Attribute(daqmx_task, md, self)
+            for md in attributes.attrs_for_target("Task")
+        ])
+        self._daqmx_task = daqmx_task
+
+    @override
+    def name(self) -> str:
+        return self._daqmx_task.name
+
+    @override
+    def accept(self, visitor: Visitor) -> None:
+        visitor.visit_task(self)
+        super().accept(visitor)
+
+    def clear_task(self) -> None:
+        self._daqmx_task.close()
+
+
+class Tasks(Node):
+    """Container for process-scoped DAQmx tasks."""
+
+    def __init__(self, parent: Node) -> None:
+        super().__init__(parent, ())
+
+    @override
+    def name(self) -> str:
+        return f"Tasks ({self.num_children()})"
+
+    @override
+    def accept(self, visitor: Visitor) -> None:
+        visitor.visit_tasks(self)
+        super().accept(visitor)
+
+    def create_task(self, name: str) -> None:
+        task = Task(nidaqmx.task.Task(name), self)
+        self.add_children((task,))
+        self._data_changed()
+
+
 class ThisProcess(Node):
     """Container for DAQmx items belonging to the current process."""
 
     def __init__(self, parent: Node | None) -> None:
-        super().__init__(parent, ())
-        # TODO tasks, watchdogs, and scales
+        super().__init__(parent, (Tasks(self),))
+        # TODO watchdogs and scales
 
     @override
     def name(self) -> str:
@@ -412,6 +462,14 @@ class Root(Node):
     def remove_observer(self, observer: Observer) -> None:
         self._observers.remove(observer)
 
+    def clean_up(self) -> None:
+        class CleanerUpper(Visitor):
+            @override
+            def visit_task(self, task: Task) -> None:
+                task.clear_task()
+
+        self.accept(CleanerUpper())
+
     def refresh_attributes(self) -> None:
         class AttributeRefresher(Visitor):
             @override
@@ -427,6 +485,14 @@ class Root(Node):
                 devices.refresh()
 
         self.accept(DeviceRefresher())
+
+    def create_task(self, name: str) -> None:
+        class TaskCreator(Visitor):
+            @override
+            def visit_tasks(self, tasks: Tasks) -> None:
+                tasks.create_task(name)
+
+        self.accept(TaskCreator())
 
     @override
     def _begin_insert_children(

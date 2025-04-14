@@ -1,6 +1,15 @@
 from typing import override
+import nidaqmx
 from qtpy.QtCore import QAbstractProxyModel, QModelIndex, Qt
-from qtpy.QtWidgets import QVBoxLayout, QLabel, QStackedWidget, QWidget
+from qtpy.QtWidgets import (
+    QInputDialog,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
 from . import data_model
 
@@ -33,9 +42,37 @@ class DefaultDetailsWidget(DetailsWidget):
         self._name_label.setText(node.name() if node is not None else "")
 
 
+class TasksDetailsWidget(DetailsWidget):
+    def __init__(self) -> None:
+        super().__init__()
+        self._create_button = QPushButton("Create Task...")
+
+        def create_task():
+            name, ok = QInputDialog().getText(
+                self, "Create Task", "Task name:"
+            )
+            if ok:
+                try:
+                    self._node.create_task(name)
+                except nidaqmx.errors.DaqError as e:
+                    QMessageBox.warning(self, "Create Task Error", str(e))
+
+        self._create_button.clicked.connect(create_task)
+        layout = QVBoxLayout()
+        layout.addWidget(self._create_button)
+        self.setLayout(layout)
+
+    @override
+    def set_node(self, node: data_model.Node | None) -> None:
+        self._node = node
+        self._create_button.setEnabled(node is not None)
+
+
 def _widget_type_for_node(node: data_model.Node | None) -> DetailsWidget:
     if node is None:
         return NoSelectionWidget
+    if isinstance(node, data_model.Tasks):
+        return TasksDetailsWidget
     return DefaultDetailsWidget
 
 

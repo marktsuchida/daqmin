@@ -30,8 +30,10 @@ def main():
         [data_model.System(None), data_model.ThisProcess(None)]
     )
     datamodel.refresh_devices()
+    app.aboutToQuit.connect(datamodel.clean_up)
 
     raw_model = ui_model.ItemModel(datamodel)
+
     proxy_model = QSortFilterProxyModel()
     proxy_model.setSourceModel(raw_model)
     proxy_model.setFilterKeyColumn(0)

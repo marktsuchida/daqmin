@@ -118,6 +118,31 @@ class Observer:
         pass
 
 
+class AttributeValue:
+    def __init__(self, *, value=None, error=None) -> None:
+        if (value is None) == (error is None):
+            raise ValueError("Must have value or error, but not both")
+        self._value = value
+        self._error = error
+
+    def is_error(self) -> bool:
+        return self._error is not None
+
+    def value(self) -> Any:
+        return self._value
+
+    def error(self) -> Any:
+        return self._error
+
+    def one_line(self) -> str:
+        if self._value is not None:
+            return str(self._value)
+        return str(self._error).split("\n", 1)[0]
+
+    def full_text(self) -> str:
+        return str(self._value if self._value is not None else self._error)
+
+
 class Attribute(Node):
     """A DAQmx attribute/property."""
 
@@ -132,32 +157,30 @@ class Attribute(Node):
         self._metadata = metadata
         self._prop_name = metadata["py_name"]
 
-        self._cached_value = None
-        self._cached_error = None
+        self._cached: AttributeValue | None = None
         self._cached_timestamp = None
 
     def _ensure_cached(self) -> None:
         if self._cached_timestamp is not None:
             return
         try:
-            self._cached_value = getattr(self._target, self._prop_name)
-            self._cached_error = None
+            self._cached = AttributeValue(
+                value=getattr(self._target, self._prop_name)
+            )
         except Exception as e:
-            self._cached_value = None
-            self._cached_error = e
+            self._cached = AttributeValue(error=e)
         self._cached_timestamp = time.perf_counter()
 
     def invalidate_cache(self, *, ttl=0.0) -> None:
         if self._cached_timestamp is None:
             return
         if ttl <= 0.0 or time.perf_counter() - self._cached_timestamp > ttl:
-            self._cached_value = None
-            self._cached_error = None
+            self._cached = None
             self._cached_timestamp = None
 
-    def get(self):
+    def get(self) -> AttributeValue:
         self._ensure_cached()
-        return (self._cached_value, self._cached_error)
+        return self._cached
 
     def set(self, value) -> None:
         setattr(self._target, self._prop_name, value)
@@ -169,9 +192,9 @@ class Attribute(Node):
     @override
     def name(self) -> str:
         if self._metadata["is_list"]:
-            vals = self.get()[0]
-            if vals is not None:
-                return f"{self._prop_name} ({len(vals)})"
+            v = self.get()
+            if not v.is_error():
+                return f"{self._prop_name} ({len(v.value())})"
         return self._prop_name
 
     @override
@@ -334,7 +357,6 @@ class System(Node):
 
         super().__init__(parent, children)
         self._daqmx_system = daqmxsys
-
 
     @override
     def name(self) -> str:

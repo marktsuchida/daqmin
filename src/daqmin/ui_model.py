@@ -82,15 +82,11 @@ class ItemModel(QAbstractItemModel, data_model.Observer):
                     isinstance(item, data_model.Attribute)
                     and index.column() == 1
                 ):
-                    value, error = item.get()
+                    v = item.get()
                     return (
-                        str(value)
-                        if value is not None
-                        else (
-                            str(error).split("\n", 1)[0]  # First line only
-                            if role == Qt.ItemDataRole.DisplayRole
-                            else str(error)
-                        )
+                        v.one_line()
+                        if role == Qt.ItemDataRole.DisplayRole
+                        else v.full_text()
                     )
             elif role == Qt.ItemDataRole.FontRole and index.column() == 0:
                 item = index.internalPointer()

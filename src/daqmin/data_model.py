@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 import time
 from typing import Any, Self, override
 import warnings
@@ -104,7 +105,7 @@ class Attribute(Node):
         self,
         target: Any,
         metadata: dict[str, Any],
-        parent: Node,
+        parent: Node | None,
     ) -> None:
         super().__init__(parent)
         self._target = target
@@ -176,7 +177,7 @@ class PhysChan(Node):
     def __init__(
         self,
         daqmx_phys_chan: nidaqmx.system.physical_channel.PhysicalChannel,
-        parent: Node,
+        parent: Node | None,
     ) -> None:
         super().__init__(parent)
         self._name = daqmx_phys_chan.name
@@ -209,7 +210,7 @@ class PhysChans(Node):
         self,
         phys_chans: list[nidaqmx.system.physical_channel.PhysicalChannel],
         metadata: dict[str, Any],
-        parent: Node,
+        parent: Node | None,
     ) -> None:
         super().__init__(parent)
         self._name = metadata["py_name"]
@@ -241,7 +242,7 @@ class Device(Node):
         self,
         name: str,
         daqmx_device: nidaqmx.system.device.Device,
-        parent: Node,
+        parent: Node | None,
     ) -> None:
         super().__init__(parent)
         self._name = name
@@ -293,7 +294,7 @@ class Devices(Node):
         self,
         daqmx_system: nidaqmx.system.System,
         metadata: dict[str, Any],
-        parent: Node,
+        parent: Node | None,
     ) -> None:
         super().__init__(parent)
         self._name = metadata["py_name"]
@@ -366,7 +367,7 @@ class Devices(Node):
 class System(Node):
     """Container for DAQmx system-wide items."""
 
-    def __init__(self, parent: Node) -> None:
+    def __init__(self, parent: Node | None) -> None:
         super().__init__(parent)
         self._daqmx_system = nidaqmx.system.System.local()
 
@@ -400,9 +401,9 @@ class System(Node):
 
 
 class ThisProcess(Node):
-    """Container for DAQmx items beloning to the current process."""
+    """Container for DAQmx items belonging to the current process."""
 
-    def __init__(self, parent: Node) -> None:
+    def __init__(self, parent: Node | None) -> None:
         super().__init__(parent)
         # TODO tasks, watchdogs, and scales
 
@@ -432,16 +433,20 @@ class Root(Node):
 
     The root node is special in two ways: it is not represented as a UI element
     and it handles observer notifications.
+
+    The children of the root node can be any non-root nodes, but are fixed at
+    creation time.
     """
 
-    # TODO: Root should not hard code its children. Instead, allow injecting at
-    # creation (so that, as a library, we can create a UI for e.g. a single
-    # task).
-
-    def __init__(self) -> None:
+    def __init__(self, children: Sequence[Node]) -> None:
         super().__init__(None)
-        self._system = System(self)
-        self._this_proc = ThisProcess(self)
+        self._children = list(children)
+        for c in self._children:
+            if c._parent is not None:
+                raise ValueError(
+                    f"Child node {c} already has parent; cannot add to Root"
+                )
+            c._parent = self
         self._observers = []
 
     @override
@@ -453,18 +458,15 @@ class Root(Node):
 
     @override
     def children(self) -> tuple[Node, ...]:
-        return (self._system, self._this_proc)
+        return tuple(self._children)
 
     @override
     def num_children(self) -> int:
-        return 2
+        return len(self._children)
 
     @override
     def child_index(self, child: Node) -> int:
-        if child is self._system:
-            return 0
-        if child is self._this_proc:
-            return 1
+        return self._children.index(child)
 
     def add_observer(self, observer: Observer) -> None:
         self._observers.append(observer)
@@ -513,7 +515,7 @@ class Root(Node):
             o.nodes_removed(node, first, last)
 
     @override
-    def _data_changed(self, node = None):
+    def _data_changed(self, node=None):
         node = self if node is None else node
         for o in self._observers:
             o.data_changed(node)

@@ -25,7 +25,9 @@ from . import data_model, detail_widgets, ui_model
 def main():
     app = QApplication(sys.argv)
 
-    datamodel = data_model.Root()
+    datamodel = data_model.Root(
+        [data_model.System(None), data_model.ThisProcess(None)]
+    )
     datamodel.refresh_devices()
 
     raw_model = ui_model.ItemModel(datamodel)

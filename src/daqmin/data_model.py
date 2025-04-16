@@ -59,6 +59,10 @@ class Node:
         node = self if node is None else node
         self.parent()._end_remove_children(first, last, node)
 
+    def _data_changed(self, node: Self | None = None) -> None:
+        node = self if node is None else node
+        self.parent()._data_changed(node)
+
 
 class Visitor:
     """Node visitor interface."""
@@ -87,6 +91,9 @@ class Observer:
         pass
 
     def nodes_removed(self, parent: Node, first: int, last: int) -> None:
+        pass
+
+    def data_changed(self, node: Node) -> None:
         pass
 
 
@@ -352,6 +359,9 @@ class Devices(Node):
             self._cached_devices = new_devices
             self._end_insert_children(*new_index_range)
 
+        if new_index_range[1] != child_index_range[1]:
+            self._data_changed()
+
 
 class System(Node):
     """Container for DAQmx system-wide items."""
@@ -501,3 +511,9 @@ class Root(Node):
         node = self if node is None else node
         for o in self._observers:
             o.nodes_removed(node, first, last)
+
+    @override
+    def _data_changed(self, node = None):
+        node = self if node is None else node
+        for o in self._observers:
+            o.data_changed(node)

@@ -118,12 +118,14 @@ class ItemModel(QAbstractItemModel, data_model.Observer):
                     return "Value"
             return None
 
-    def _item_index(self, item: data_model.Node) -> QModelIndex:
+    def _item_index(
+        self, item: data_model.Node, column: int = 0
+    ) -> QModelIndex:
         parent_item = item.parent()
         if parent_item is None:
             raise NotImplementedError()  # Shouldn't be getting index of root
         row = parent_item.child_index(item)
-        return self.createIndex(row, 0, parent_item)
+        return self.createIndex(row, column, parent_item)
 
     @override
     def nodes_about_to_be_inserted(
@@ -148,3 +150,9 @@ class ItemModel(QAbstractItemModel, data_model.Observer):
         self, parent: data_model.Node, first: int, last: int
     ) -> None:
         self.endRemoveRows()
+
+    @override
+    def data_changed(self, node: data_model.Node) -> None:
+        self.dataChanged.emit(
+            self._item_index(node), self._item_index(node, 1)
+        )

@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 import time
-from typing import Any, Self, override
+from typing import Any, Self, final, override
 import warnings
 
 import nidaqmx
@@ -11,8 +11,9 @@ from . import attributes
 class Node:
     """Tree node."""
 
-    def __init__(self, parent: Self | None) -> None:
+    def __init__(self, parent: Self | None, children: Sequence[Self]) -> None:
         self._parent = parent
+        self._children = list(children)
 
     def name(self) -> str:
         return "Unnamed"
@@ -20,17 +21,36 @@ class Node:
     def is_writable(self) -> bool:
         return False
 
+    @final
     def parent(self) -> Self | None:
         return self._parent
 
+    @final
     def children(self) -> tuple[Self, ...]:
-        return ()
+        return tuple(self._children)
 
+    @final
     def num_children(self) -> int:
-        return len(self.children())
+        return len(self._children)
 
+    @final
     def child_index(self, child: Self) -> int:
-        raise NotImplementedError()
+        return self._children.index(child)
+
+    @final
+    def remove_all_children(self) -> None:
+        n_children = self.num_children()
+        self._begin_remove_children(0, n_children - 1)
+        self._children.clear()
+        self._end_remove_children(0, n_children - 1)
+
+    @final
+    def add_children(self, children: Sequence[Self]) -> None:
+        start = len(self._children)
+        stop = start + len(children)
+        self._begin_insert_children(start, stop - 1)
+        self._children.extend(children)
+        self._end_insert_children(start, stop - 1)
 
     def accept(self, visitor: "Visitor") -> None:
         for child in self.children():
@@ -107,7 +127,7 @@ class Attribute(Node):
         metadata: dict[str, Any],
         parent: Node | None,
     ) -> None:
-        super().__init__(parent)
+        super().__init__(parent, ())
         self._target = target
         self._metadata = metadata
         self._prop_name = metadata["py_name"]
@@ -159,14 +179,6 @@ class Attribute(Node):
         return self._metadata["settable"]
 
     @override
-    def children(self) -> tuple[Node, ...]:
-        return ()
-
-    @override
-    def num_children(self) -> int:
-        return 0
-
-    @override
     def accept(self, visitor: Visitor) -> None:
         visitor.visit_attribute(self)
 
@@ -179,28 +191,16 @@ class PhysChan(Node):
         daqmx_phys_chan: nidaqmx.system.physical_channel.PhysicalChannel,
         parent: Node | None,
     ) -> None:
-        super().__init__(parent)
-        self._name = daqmx_phys_chan.name
-        self._attributes = [
+        attrs = [
             Attribute(daqmx_phys_chan, md, self)
             for md in attributes.attrs_for_target("PhysicalChannel")
         ]
+        super().__init__(parent, attrs)
+        self._name = daqmx_phys_chan.name
 
     @override
     def name(self) -> str:
         return self._name
-
-    @override
-    def children(self) -> tuple[Node, ...]:
-        return tuple(self._attributes)
-
-    @override
-    def num_children(self) -> int:
-        return len(self._attributes)
-
-    @override
-    def child_index(self, child: Node) -> int:
-        return self._attributes.index(child)
 
 
 class PhysChans(Node):
@@ -212,27 +212,13 @@ class PhysChans(Node):
         metadata: dict[str, Any],
         parent: Node | None,
     ) -> None:
-        super().__init__(parent)
+        phys_chans = [PhysChan(phys_chan, self) for phys_chan in phys_chans]
+        super().__init__(parent, phys_chans)
         self._name = metadata["py_name"]
-        self._phys_chans = tuple(
-            PhysChan(phys_chan, self) for phys_chan in phys_chans
-        )
 
     @override
     def name(self) -> str:
         return f"{self._name} ({self.num_children()})"
-
-    @override
-    def children(self) -> tuple[Node, ...]:
-        return self._phys_chans
-
-    @override
-    def num_children(self) -> int:
-        return len(self._phys_chans)
-
-    @override
-    def child_index(self, child: Node) -> int:
-        return self._phys_chans.index(child)
 
 
 class Device(Node):
@@ -244,10 +230,6 @@ class Device(Node):
         daqmx_device: nidaqmx.system.device.Device,
         parent: Node | None,
     ) -> None:
-        super().__init__(parent)
-        self._name = name
-        self._daqmx_device = daqmx_device
-
         def make_child(daqmx_device, metadata, parent):
             name = metadata["py_name"]
             if name in {
@@ -265,26 +247,18 @@ class Device(Node):
                 )
             return Attribute(daqmx_device, metadata, parent)
 
-        self._children = [
+        children = [
             make_child(daqmx_device, md, self)
             for md in attributes.attrs_for_target("Device")
         ]
 
+        super().__init__(parent, children)
+        self._name = name
+        self._daqmx_device = daqmx_device
+
     @override
     def name(self) -> str:
         return self._name
-
-    @override
-    def children(self) -> tuple[Node, ...]:
-        return tuple(self._children)
-
-    @override
-    def num_children(self) -> int:
-        return len(self._children)
-
-    @override
-    def child_index(self, child: Node) -> int:
-        return self._children.index(child)
 
 
 class Devices(Node):
@@ -296,27 +270,13 @@ class Devices(Node):
         metadata: dict[str, Any],
         parent: Node | None,
     ) -> None:
-        super().__init__(parent)
+        super().__init__(parent, ())
         self._name = metadata["py_name"]
         self._daqmx_system = daqmx_system
-        self._cached_dev_names: list[str] = []
-        self._cached_devices: list[Device] = []
 
     @override
     def name(self) -> str:
-        return f"{self._name} ({len(self._cached_devices)})"
-
-    @override
-    def children(self) -> tuple[Node, ...]:
-        return tuple(self._cached_devices)
-
-    @override
-    def num_children(self) -> int:
-        return len(self._cached_devices)
-
-    @override
-    def child_index(self, child: Node) -> int:
-        return self._cached_devices.index(child)
+        return f"{self._name} ({self.num_children()})"
 
     @override
     def accept(self, visitor: Visitor) -> None:
@@ -335,32 +295,23 @@ class Devices(Node):
         # could refine that by letting the device handle the refresh and
         # preserving what structure it can.
 
+        old_dev_names = [d.name() for d in self.children()]
         new_dev_names: list[str] = self._daqmx_system.devices.device_names
         new_devices: list[Device] = []
         for dev_name in new_dev_names:
             try:
-                i = self._cached_dev_names.index(dev_name)
+                i = old_dev_names.index(dev_name)
                 device = self._cached_devices[i]
             except ValueError:
                 daqmx_device = nidaqmx.system.device.Device(dev_name)
                 device = Device(dev_name, daqmx_device, self)
             new_devices.append(device)
 
-        child_index_range = (0, self.num_children() - 1)
-        if child_index_range[1] >= 0:
-            self._begin_remove_children(*child_index_range)
-            self._cached_dev_names = []
-            self._cached_devices = []
-            self._end_remove_children(*child_index_range)
-
-        new_index_range = (0, len(new_dev_names) - 1)
-        if new_index_range[1] >= 0:
-            self._begin_insert_children(*new_index_range)
-            self._cached_dev_names = new_dev_names
-            self._cached_devices = new_devices
-            self._end_insert_children(*new_index_range)
-
-        if new_index_range[1] != child_index_range[1]:
+        if self.num_children() > 0:
+            self.remove_all_children()
+        if len(new_dev_names) > 0:
+            self.add_children(new_devices)
+        if len(new_dev_names) != len(old_dev_names):
             self._data_changed()
 
 
@@ -368,9 +319,6 @@ class System(Node):
     """Container for DAQmx system-wide items."""
 
     def __init__(self, parent: Node | None) -> None:
-        super().__init__(parent)
-        self._daqmx_system = nidaqmx.system.System.local()
-
         def make_child(daqmx_system, metadata, parent):
             name = metadata["py_name"]
             if name == "devices":
@@ -378,53 +326,31 @@ class System(Node):
             # TODO Persisted channels, tasks, and scales
             return Attribute(daqmx_system, metadata, self)
 
-        self._children = [
-            make_child(self._daqmx_system, md, self)
+        daqmxsys = nidaqmx.system.System.local()
+        children = [
+            make_child(daqmxsys, md, self)
             for md in attributes.attrs_for_target("System")
         ]
+
+        super().__init__(parent, children)
+        self._daqmx_system = daqmxsys
+
 
     @override
     def name(self) -> str:
         return "System"
-
-    @override
-    def children(self) -> tuple[Node, ...]:
-        return tuple(self._children)
-
-    @override
-    def num_children(self) -> int:
-        return len(self._children)
-
-    @override
-    def child_index(self, child: Node) -> int:
-        return self._children.index(child)
 
 
 class ThisProcess(Node):
     """Container for DAQmx items belonging to the current process."""
 
     def __init__(self, parent: Node | None) -> None:
-        super().__init__(parent)
+        super().__init__(parent, ())
         # TODO tasks, watchdogs, and scales
 
     @override
     def name(self) -> str:
         return "This Process"
-
-    @override
-    def children(self) -> tuple[Node, ...]:
-        return (
-            # TODO tasks, watchdogs, and scales
-        )
-
-    @override
-    def num_children(self) -> int:
-        return 0  # TODO
-
-    @override
-    def child_index(self, child: Node) -> int:
-        # TODO
-        raise NotImplementedError()
 
 
 class Root(Node):
@@ -439,14 +365,13 @@ class Root(Node):
     """
 
     def __init__(self, children: Sequence[Node]) -> None:
-        super().__init__(None)
-        self._children = list(children)
-        for c in self._children:
+        for c in children:
             if c._parent is not None:
                 raise ValueError(
                     f"Child node {c} already has parent; cannot add to Root"
                 )
             c._parent = self
+        super().__init__(None, children)
         self._observers = []
 
     @override
@@ -455,18 +380,6 @@ class Root(Node):
             "Name of Root node was accessed; this is probably a programming error"
         )
         return "(Root)"
-
-    @override
-    def children(self) -> tuple[Node, ...]:
-        return tuple(self._children)
-
-    @override
-    def num_children(self) -> int:
-        return len(self._children)
-
-    @override
-    def child_index(self, child: Node) -> int:
-        return self._children.index(child)
 
     def add_observer(self, observer: Observer) -> None:
         self._observers.append(observer)

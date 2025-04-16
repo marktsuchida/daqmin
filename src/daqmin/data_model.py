@@ -40,45 +40,45 @@ class Node:
     @final
     def remove_all_children(self) -> None:
         n_children = self.num_children()
-        self._begin_remove_children(0, n_children - 1)
+        self._begin_remove_children(0, n_children)
         self._children.clear()
-        self._end_remove_children(0, n_children - 1)
+        self._end_remove_children(0, n_children)
 
     @final
     def add_children(self, children: Sequence[Self]) -> None:
         start = len(self._children)
         stop = start + len(children)
-        self._begin_insert_children(start, stop - 1)
+        self._begin_insert_children(start, stop)
         self._children.extend(children)
-        self._end_insert_children(start, stop - 1)
+        self._end_insert_children(start, stop)
 
     def accept(self, visitor: "Visitor") -> None:
         for child in self.children():
             child.accept(visitor)
 
     def _begin_insert_children(
-        self, first: int, last: int, node: Self | None = None
+        self, start: int, stop: int, node: Self | None = None
     ) -> None:
         node = self if node is None else node
-        self.parent()._begin_insert_children(first, last, node)
+        self.parent()._begin_insert_children(start, stop, node)
 
     def _end_insert_children(
-        self, first: int, last: int, node: Self | None = None
+        self, start: int, stop: int, node: Self | None = None
     ) -> None:
         node = self if node is None else node
-        self.parent()._end_insert_children(first, last, node)
+        self.parent()._end_insert_children(start, stop, node)
 
     def _begin_remove_children(
-        self, first: int, last: int, node: Self | None = None
+        self, start: int, stop: int, node: Self | None = None
     ) -> None:
         node = self if node is None else node
-        self.parent()._begin_remove_children(first, last, node)
+        self.parent()._begin_remove_children(start, stop, node)
 
     def _end_remove_children(
-        self, first: int, last: int, node: Self | None = None
+        self, start: int, stop: int, node: Self | None = None
     ) -> None:
         node = self if node is None else node
-        self.parent()._end_remove_children(first, last, node)
+        self.parent()._end_remove_children(start, stop, node)
 
     def _data_changed(self, node: Self | None = None) -> None:
         node = self if node is None else node
@@ -397,35 +397,35 @@ class Root(Node):
 
     @override
     def _begin_insert_children(
-        self, first: int, last: int, node: Self | None = None
+        self, start: int, stop: int, node: Self | None = None
     ) -> None:
         node = self if node is None else node
         for o in self._observers:
-            o.nodes_about_to_be_inserted(node, first, last)
+            o.nodes_about_to_be_inserted(node, start, stop)
 
     @override
     def _end_insert_children(
-        self, first: int, last: int, node: Self | None = None
+        self, start: int, stop: int, node: Self | None = None
     ) -> None:
         node = self if node is None else node
         for o in self._observers:
-            o.nodes_inserted(node, first, last)
+            o.nodes_inserted(node, start, stop)
 
     @override
     def _begin_remove_children(
-        self, first: int, last: int, node: Self | None = None
+        self, start: int, stop: int, node: Self | None = None
     ) -> None:
         node = self if node is None else node
         for o in self._observers:
-            o.nodes_about_to_be_removed(node, first, last)
+            o.nodes_about_to_be_removed(node, start, stop)
 
     @override
     def _end_remove_children(
-        self, first: int, last: int, node: Self | None = None
+        self, start: int, stop: int, node: Self | None = None
     ) -> None:
         node = self if node is None else node
         for o in self._observers:
-            o.nodes_removed(node, first, last)
+            o.nodes_removed(node, start, stop)
 
     @override
     def _data_changed(self, node=None):

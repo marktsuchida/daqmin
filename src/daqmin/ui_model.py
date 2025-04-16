@@ -129,25 +129,25 @@ class ItemModel(QAbstractItemModel, data_model.Observer):
 
     @override
     def nodes_about_to_be_inserted(
-        self, parent: data_model.Node, first: int, last: int
+        self, parent: data_model.Node, start: int, stop: int
     ) -> None:
-        self.beginInsertRows(self._item_index(parent), first, last)
+        self.beginInsertRows(self._item_index(parent), start, stop - 1)
 
     @override
     def nodes_inserted(
-        self, parent: data_model.Node, first: int, last: int
+        self, parent: data_model.Node, start: int, stop: int
     ) -> None:
         self.endInsertRows()
 
     @override
     def nodes_about_to_be_removed(
-        self, parent: data_model.Node, first: int, last: int
+        self, parent: data_model.Node, start: int, stop: int
     ) -> None:
-        self.beginRemoveRows(self._item_index(parent), first, last)
+        self.beginRemoveRows(self._item_index(parent), start, stop - 1)
 
     @override
     def nodes_removed(
-        self, parent: data_model.Node, first: int, last: int
+        self, parent: data_model.Node, start: int, stop: int
     ) -> None:
         self.endRemoveRows()
 

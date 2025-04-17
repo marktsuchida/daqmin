@@ -46,6 +46,8 @@ class Node:
 
     @final
     def add_children(self, children: Sequence[Self]) -> None:
+        # Children must already have parent set to self; should we set parent
+        # here, or at least check?
         start = len(self._children)
         stop = start + len(children)
         self._begin_insert_children(start, stop)

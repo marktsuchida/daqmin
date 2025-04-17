@@ -29,24 +29,25 @@ class ItemModel(QAbstractItemModel, data_model.Observer):
         with exceptions_logged():
             if not self.hasIndex(row, col, parent):
                 return QModelIndex()
-            parent_item = (
+            parent_node = (
                 parent.internalPointer()
                 if parent.isValid()
                 else self._dataroot
             )
-            item = parent_item.children()[row]
-            return self.createIndex(row, col, item)
+            node = parent_node.children()[row]  # TODO: Use .child_at(row)
+            return self.createIndex(row, col, node)
 
     @override
     def parent(self, index: QModelIndex) -> QModelIndex:
         with exceptions_logged():
             if not index.isValid():
                 return QModelIndex()
-            item = index.internalPointer().parent()
-            if item is self._dataroot:
+            parent_node = index.internalPointer().parent()
+            if parent_node is self._dataroot:
                 return QModelIndex()
-            row = item.parent().children().index(item)
-            return self.createIndex(row, 0, item)
+            grandparent_node = parent_node.parent()
+            parent_row = grandparent_node.child_index(parent_node)
+            return self.createIndex(parent_row, 0, parent_node)
 
     @override
     def rowCount(self, parent: QModelIndex) -> int:
@@ -55,8 +56,8 @@ class ItemModel(QAbstractItemModel, data_model.Observer):
                 return self._dataroot.num_children()
             if parent.column() != 0:
                 return 0
-            item = parent.internalPointer()
-            return item.num_children()
+            parent_node = parent.internalPointer()
+            return parent_node.num_children()
 
     @override
     def columnCount(self, parent: QModelIndex) -> int:
@@ -75,22 +76,22 @@ class ItemModel(QAbstractItemModel, data_model.Observer):
                 Qt.ItemDataRole.DisplayRole,
                 Qt.ItemDataRole.ToolTipRole,
             ):
-                item = index.internalPointer()
+                node = index.internalPointer()
                 if index.column() == 0:
-                    return item.name()
+                    return node.name()
                 if (
-                    isinstance(item, data_model.Attribute)
+                    isinstance(node, data_model.Attribute)
                     and index.column() == 1
                 ):
-                    v = item.get()
+                    v = node.get()
                     return (
                         v.one_line()
                         if role == Qt.ItemDataRole.DisplayRole
                         else v.full_text()
                     )
             elif role == Qt.ItemDataRole.FontRole and index.column() == 0:
-                item = index.internalPointer()
-                if item.is_writable():
+                node = index.internalPointer()
+                if node.is_writable():
                     font = QApplication.font()
                     font.setBold(True)
                     return font
@@ -114,20 +115,22 @@ class ItemModel(QAbstractItemModel, data_model.Observer):
                     return "Value"
             return None
 
-    def _item_index(
-        self, item: data_model.Node, column: int = 0
+    def _model_index_for_node(
+        self, node: data_model.Node, column: int = 0
     ) -> QModelIndex:
-        parent_item = item.parent()
-        if parent_item is None:
-            raise NotImplementedError()  # Shouldn't be getting index of root
-        row = parent_item.child_index(item)
-        return self.createIndex(row, column, parent_item)
+        parent_node = node.parent()
+        if parent_node is None:  # The given node is root
+            return QModelIndex()
+        row = parent_node.child_index(node)
+        return self.createIndex(row, column, node)
 
     @override
     def nodes_about_to_be_inserted(
         self, parent: data_model.Node, start: int, stop: int
     ) -> None:
-        self.beginInsertRows(self._item_index(parent), start, stop - 1)
+        self.beginInsertRows(
+            self._model_index_for_node(parent), start, stop - 1
+        )
 
     @override
     def nodes_inserted(
@@ -139,7 +142,9 @@ class ItemModel(QAbstractItemModel, data_model.Observer):
     def nodes_about_to_be_removed(
         self, parent: data_model.Node, start: int, stop: int
     ) -> None:
-        self.beginRemoveRows(self._item_index(parent), start, stop - 1)
+        self.beginRemoveRows(
+            self._model_index_for_node(parent), start, stop - 1
+        )
 
     @override
     def nodes_removed(
@@ -150,5 +155,6 @@ class ItemModel(QAbstractItemModel, data_model.Observer):
     @override
     def data_changed(self, node: data_model.Node) -> None:
         self.dataChanged.emit(
-            self._item_index(node), self._item_index(node, 1)
+            self._model_index_for_node(node),
+            self._model_index_for_node(node, 1),
         )

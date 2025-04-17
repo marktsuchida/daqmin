@@ -54,6 +54,14 @@ class Node:
         self._children.extend(children)
         self._end_insert_children(start, stop)
 
+    @final
+    def remove_child(self, child: Self) -> None:
+        start = self.child_index(child)
+        stop = start + 1
+        self._begin_remove_children(start, stop)
+        self._children.remove(child)
+        self._end_remove_children(start, stop)
+
     def accept(self, visitor: "Visitor") -> None:
         for child in self.children():
             child.accept(visitor)

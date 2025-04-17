@@ -42,6 +42,28 @@ class DefaultDetailsWidget(DetailsWidget):
         self._name_label.setText(node.name() if node is not None else "")
 
 
+class TaskDetailsWidget(DetailsWidget):
+    def __init__(self) -> None:
+        super().__init__()
+        self._clear_button = QPushButton("Clear Task")
+
+        def clear_task():
+            task = self._node
+            tasks = task.parent()
+            tasks.remove_child(task)
+            task.clear_task()
+
+        self._clear_button.clicked.connect(clear_task)
+        layout = QVBoxLayout()
+        layout.addWidget(self._clear_button)
+        self.setLayout(layout)
+
+    @override
+    def set_node(self, node: data_model.Node | None) -> None:
+        self._node = node
+        self._clear_button.setEnabled(node is not None)
+
+
 class TasksDetailsWidget(DetailsWidget):
     def __init__(self) -> None:
         super().__init__()
@@ -71,6 +93,8 @@ class TasksDetailsWidget(DetailsWidget):
 def _widget_type_for_node(node: data_model.Node | None) -> DetailsWidget:
     if node is None:
         return NoSelectionWidget
+    if isinstance(node, data_model.Task):
+        return TaskDetailsWidget
     if isinstance(node, data_model.Tasks):
         return TasksDetailsWidget
     return DefaultDetailsWidget

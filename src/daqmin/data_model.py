@@ -160,7 +160,7 @@ class Attribute(Node):
         self._prop_name = metadata["py_name"]
 
         self._cached: AttributeValue | None = None
-        self._cached_timestamp = None
+        self._cached_timestamp: float | None = None
 
     def _ensure_cached(self) -> None:
         if self._cached_timestamp is not None:
@@ -179,6 +179,7 @@ class Attribute(Node):
         if ttl <= 0.0 or time.perf_counter() - self._cached_timestamp > ttl:
             self._cached = None
             self._cached_timestamp = None
+            self._data_changed()
 
     def get(self) -> AttributeValue:
         self._ensure_cached()
@@ -410,6 +411,14 @@ class Root(Node):
 
     def remove_observer(self, observer: Observer) -> None:
         self._observers.remove(observer)
+
+    def refresh_attributes(self) -> None:
+        class AttributeRefresher(Visitor):
+            @override
+            def visit_attribute(self, attr: Attribute) -> None:
+                attr.invalidate_cache()
+
+        self.accept(AttributeRefresher())
 
     def refresh_devices(self) -> None:
         class DeviceRefresher(Visitor):

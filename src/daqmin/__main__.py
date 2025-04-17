@@ -13,6 +13,7 @@ from qtpy.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
+    QPushButton,
     QSplitter,
     QTreeView,
     QVBoxLayout,
@@ -37,6 +38,9 @@ def main():
     proxy_model.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
     proxy_model.setRecursiveFilteringEnabled(True)
 
+    refresh_btn = QPushButton("Refresh")
+    refresh_btn.clicked.connect(datamodel.refresh_attributes)
+
     sort_chkbox = QCheckBox("Sort")
 
     def update_sorting(state: int) -> None:
@@ -51,6 +55,7 @@ def main():
     filter_line.setClearButtonEnabled(True)
 
     sort_filter_layout = QHBoxLayout()
+    sort_filter_layout.addWidget(refresh_btn)
     sort_filter_layout.addWidget(sort_chkbox)
     sort_filter_layout.addWidget(filter_label)
     sort_filter_layout.addWidget(filter_line)

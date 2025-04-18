@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 import time
 from typing import Any, Self, final, override
 import warnings
@@ -160,18 +160,27 @@ class AttributeValue:
 
 
 class Attribute(Node):
-    """A DAQmx attribute/property."""
+    """
+    A DAQmx attribute/property.
+
+    read_func can be set for attributes that require special handling in
+    nidaqmx-python. It is a function taking the target and (ostensible) Python
+    property name and returning the value, raising an exception upon failure.
+    """
 
     def __init__(
         self,
         target: Any,
         metadata: dict[str, Any],
         parent: Node | None,
+        *,
+        read_func: Callable[[Any, str], Any] = getattr,
     ) -> None:
         super().__init__(parent, ())
         self._target = target
         self._metadata = metadata
         self._prop_name = metadata["py_name"]
+        self._reader = read_func
 
         self._cached: AttributeValue | None = None
         self._cached_timestamp: float | None = None
@@ -181,7 +190,7 @@ class Attribute(Node):
             return
         try:
             self._cached = AttributeValue(
-                value=getattr(self._target, self._prop_name)
+                value=self._reader(self._target, self._prop_name)
             )
         except Exception as e:
             self._cached = AttributeValue(error=e)
@@ -221,6 +230,24 @@ class Attribute(Node):
     @override
     def accept(self, visitor: Visitor) -> None:
         visitor.visit_attribute(self)
+
+
+class TaskCompleteAttribute(Attribute):
+    """A task's 'complete' attribute."""
+
+    def __init__(
+        self, target: Any, metadata: dict[str, Any], parent: Node | None
+    ) -> None:
+        # In C, there is DAQmxIsTaskDone(handle, bool*) (a regular function)
+        # and DAQmxGetTaskComplete(handle, bool*) (a property getter; property
+        # name is listed as "Task Done"), with no documented difference. The
+        # Python API exposes only the former, as a function, not a property. So
+        # we need to special-case it.
+        # TODO Patch or add help string to explain that we are not getting the
+        # actual 'complete' property.
+        super().__init__(
+            target, metadata, parent, read_func=lambda t, p: t.is_task_done()
+        )
 
 
 class PhysChan(Node):
@@ -384,10 +411,17 @@ class Task(Node):
     """A process-scoped DAQmx task."""
 
     def __init__(self, daqmx_task: nidaqmx.task.Task, parent: Node) -> None:
-        super().__init__(parent, [
-            Attribute(daqmx_task, md, self)
+        def make_child(daqmx_task, metadata, parent):
+            name = metadata["py_name"]
+            if name == "complete":
+                return TaskCompleteAttribute(daqmx_task, metadata, parent)
+            return Attribute(daqmx_task, metadata, parent)
+
+        children = [
+            make_child(daqmx_task, md, self)
             for md in attributes.attrs_for_target("Task")
-        ])
+        ]
+        super().__init__(parent, children)
         self._daqmx_task = daqmx_task
 
     @override

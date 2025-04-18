@@ -37,3 +37,9 @@ dependencies = [
 
 [tool.ruff]
 line-length = 79
+
+[tool.uv]
+cache-keys = [
+    {file = "pyproject.toml"},
+    {file = "src/daqmin/genattrs.py"},
+]

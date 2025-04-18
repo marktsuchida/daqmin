@@ -407,6 +407,213 @@ class System(Node):
         return "System"
 
 
+class ExportSignals(Node):
+    """A DAQmx task's collection of exported signal attributes."""
+
+    def __init__(
+        self, daqmx_exsigs: nidaqmx.task.ExportSignals, parent: Node
+    ) -> None:
+        super().__init__(
+            parent,
+            [
+                Attribute(daqmx_exsigs, md, self)
+                for md in attributes.attrs_for_target("ExportSignals")
+            ],
+        )
+
+    @override
+    def name(self) -> str:
+        return "export_signals"
+
+
+class InStream(Node):
+    """A DAQmx task's collection of read attributes."""
+
+    def __init__(
+        self, daqmx_instream: nidaqmx.task.InStream, parent: Node
+    ) -> None:
+        super().__init__(
+            parent,
+            [
+                Attribute(daqmx_instream, md, self)
+                for md in attributes.attrs_for_target("InStream")
+            ],
+        )
+
+    @override
+    def name(self) -> str:
+        return "in_stream"
+
+
+class OutStream(Node):
+    """A DAQmx task's collection of write attributes."""
+
+    def __init__(
+        self, daqmx_outstream: nidaqmx.task.OutStream, parent: Node
+    ) -> None:
+        super().__init__(
+            parent,
+            [
+                Attribute(daqmx_outstream, md, self)
+                for md in attributes.attrs_for_target("OutStream")
+            ],
+        )
+
+    @override
+    def name(self) -> str:
+        return "out_stream"
+
+
+class Timing(Node):
+    """A DAQmx task's collection of timing attributes."""
+
+    def __init__(
+        self, daqmx_timing: nidaqmx.task.Timing, parent: Node
+    ) -> None:
+        super().__init__(
+            parent,
+            [
+                Attribute(daqmx_timing, md, self)
+                for md in attributes.attrs_for_target("Timing")
+            ],
+        )
+
+    @override
+    def name(self) -> str:
+        return "timing"
+
+
+class ArmStartTrigger(Node):
+    """A DAQmx task's collection of arm start trigger attributes."""
+
+    def __init__(
+        self,
+        daqmx_arm_start_trigger: nidaqmx.task.triggering.ArmStartTrigger,
+        parent: Node,
+    ) -> None:
+        super().__init__(
+            parent,
+            [
+                Attribute(daqmx_arm_start_trigger, md, self)
+                for md in attributes.attrs_for_target("ArmStartTrigger")
+            ],
+        )
+
+    @override
+    def name(self) -> str:
+        return "arm_start_trigger"
+
+
+class HandshakeTrigger(Node):
+    """A DAQmx task's collection of handshake trigger attributes."""
+
+    def __init__(
+        self,
+        daqmx_handshake_trigger: nidaqmx.task.triggering.HandshakeTrigger,
+        parent: Node,
+    ) -> None:
+        super().__init__(
+            parent,
+            [
+                Attribute(daqmx_handshake_trigger, md, self)
+                for md in attributes.attrs_for_target("HandshakeTrigger")
+            ],
+        )
+
+    @override
+    def name(self) -> str:
+        return "handshake_trigger"
+
+
+class PauseTrigger(Node):
+    """A DAQmx task's collection of pause trigger attributes."""
+
+    def __init__(
+        self,
+        daqmx_pause_trigger: nidaqmx.task.triggering.PauseTrigger,
+        parent: Node,
+    ) -> None:
+        super().__init__(
+            parent,
+            [
+                Attribute(daqmx_pause_trigger, md, self)
+                for md in attributes.attrs_for_target("PauseTrigger")
+            ],
+        )
+
+    @override
+    def name(self) -> str:
+        return "pause_trigger"
+
+
+class ReferenceTrigger(Node):
+    """A DAQmx task's collection of reference trigger attributes."""
+
+    def __init__(
+        self,
+        daqmx_reference_trigger: nidaqmx.task.triggering.ReferenceTrigger,
+        parent: Node,
+    ) -> None:
+        super().__init__(
+            parent,
+            [
+                Attribute(daqmx_reference_trigger, md, self)
+                for md in attributes.attrs_for_target("ReferenceTrigger")
+            ],
+        )
+
+    @override
+    def name(self) -> str:
+        return "reference_trigger"
+
+
+class StartTrigger(Node):
+    """A DAQmx task's collection of start trigger attributes."""
+
+    def __init__(
+        self,
+        daqmx_start_trigger: nidaqmx.task.triggering.StartTrigger,
+        parent: Node,
+    ) -> None:
+        super().__init__(
+            parent,
+            [
+                Attribute(daqmx_start_trigger, md, self)
+                for md in attributes.attrs_for_target("StartTrigger")
+            ],
+        )
+
+    @override
+    def name(self) -> str:
+        return "start_trigger"
+
+
+class Triggers(Node):
+    """A DAQmx task's collection of trigger attributes."""
+
+    def __init__(
+        self, daqmx_triggers: nidaqmx.task.triggering.Triggers, parent: Node
+    ) -> None:
+        super().__init__(
+            parent,
+            [
+                ArmStartTrigger(daqmx_triggers.arm_start_trigger, self),
+                HandshakeTrigger(daqmx_triggers.handshake_trigger, self),
+                PauseTrigger(daqmx_triggers.pause_trigger, self),
+                ReferenceTrigger(daqmx_triggers.reference_trigger, self),
+                StartTrigger(daqmx_triggers.start_trigger, self),
+            ]
+            + [
+                Attribute(daqmx_triggers, md, self)
+                for md in attributes.attrs_for_target("Triggers")
+            ],
+        )
+
+    @override
+    def name(self) -> str:
+        return "triggers"
+
+
 class Task(Node):
     """A process-scoped DAQmx task."""
 
@@ -420,6 +627,12 @@ class Task(Node):
         children = [
             make_child(daqmx_task, md, self)
             for md in attributes.attrs_for_target("Task")
+        ] + [
+            ExportSignals(daqmx_task.export_signals, self),
+            InStream(daqmx_task.in_stream, self),
+            OutStream(daqmx_task.out_stream, self),
+            Timing(daqmx_task.timing, self),
+            Triggers(daqmx_task.triggers, self),
         ]
         super().__init__(parent, children)
         self._daqmx_task = daqmx_task

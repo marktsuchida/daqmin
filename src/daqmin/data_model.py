@@ -9,9 +9,15 @@ from . import attributes
 
 
 class Node:
-    """Tree node."""
+    """
+    Skeletal implementation of a node in the tree of DAQmx objects.
+    """
 
     def __init__(self, parent: Self | None, children: Sequence[Self]) -> None:
+        """
+        parent: parent node, or None to indeicate the root node
+        children: child nodes
+        """
         self._parent = parent
         self._children = list(children)
 
@@ -23,18 +29,30 @@ class Node:
 
     @final
     def parent(self) -> Self | None:
+        """
+        Return the parent node, or None if this node is the root.
+        """
         return self._parent
 
     @final
     def children(self) -> tuple[Self, ...]:
+        """
+        Return the child nodes in order, or an empty tuple if this node is a leaf.
+        """
         return tuple(self._children)
 
     @final
     def num_children(self) -> int:
+        """
+        Return the number of child nodes.
+        """
         return len(self._children)
 
     @final
     def child_index(self, child: Self) -> int:
+        """
+        Return the index of the given child; raise ValueError if not a child.
+        """
         return self._children.index(child)
 
     @final
@@ -63,34 +81,60 @@ class Node:
         self._end_remove_children(start, stop)
 
     def accept(self, visitor: "Visitor") -> None:
+        """
+        Accept a visitor for a depth-first, pre-order traversal.
+
+        This default implementation just makes the visitor visit all children.
+        Subclasses may override to accept the visitor before calling super().
+        """
         for child in self.children():
             child.accept(visitor)
 
     def _begin_insert_children(
         self, start: int, stop: int, node: Self | None = None
     ) -> None:
+        # Notify observers that a node (default: this node) is about to have
+        # children inserted.
+        # Non-root nodes just propagate to parent (as implemented here).
+        # The Root overrides this to actually notify the observers.
         node = self if node is None else node
         self.parent()._begin_insert_children(start, stop, node)
 
     def _end_insert_children(
         self, start: int, stop: int, node: Self | None = None
     ) -> None:
+        # Notify observers that a node (default: this node) has had children
+        # inserted.
+        # Non-root nodes just propagate to parent (as implemented here).
+        # The Root overrides this to actually notify the observers.
         node = self if node is None else node
         self.parent()._end_insert_children(start, stop, node)
 
     def _begin_remove_children(
         self, start: int, stop: int, node: Self | None = None
     ) -> None:
+        # Notify observers that a node (default: this node) is about to have
+        # children removed.
+        # Non-root nodes just propagate to parent (as implemented here).
+        # The Root overrides this to actually notify the observers.
         node = self if node is None else node
         self.parent()._begin_remove_children(start, stop, node)
 
     def _end_remove_children(
         self, start: int, stop: int, node: Self | None = None
     ) -> None:
+        # Notify observers that a node (default: this node) has had children
+        # removed.
+        # Non-root nodes just propagate to parent (as implemented here).
+        # The Root overrides this to actually notify the observers.
         node = self if node is None else node
         self.parent()._end_remove_children(start, stop, node)
 
     def _data_changed(self, node: Self | None = None) -> None:
+        # Notify observers that the data of a node (default: this node) has
+        # changed.
+        # Non-root nodes just propagate to parent (as implemented here).
+        # The Root overrides this to actually notify the observers.
         node = self if node is None else node
         self.parent()._data_changed(node)
 
@@ -115,19 +159,19 @@ class Observer:
     """Node observer interface that can be registered with Root."""
 
     def nodes_about_to_be_inserted(
-        self, parent: Node, first: int, last: int
+        self, parent: Node, start: int, stop: int
     ) -> None:
         pass
 
-    def nodes_inserted(self, parent: Node, first: int, last: int) -> None:
+    def nodes_inserted(self, parent: Node, start: int, stop: int) -> None:
         pass
 
     def nodes_about_to_be_removed(
-        self, parent: Node, first: int, last: int
+        self, parent: Node, start: int, stop: int
     ) -> None:
         pass
 
-    def nodes_removed(self, parent: Node, first: int, last: int) -> None:
+    def nodes_removed(self, parent: Node, start: int, stop: int) -> None:
         pass
 
     def data_changed(self, node: Node) -> None:
@@ -747,7 +791,7 @@ class Root(Node):
 
     @override
     def _begin_insert_children(
-        self, start: int, stop: int, node: Self | None = None
+        self, start: int, stop: int, node: Node | None = None
     ) -> None:
         node = self if node is None else node
         for o in self._observers:
@@ -755,7 +799,7 @@ class Root(Node):
 
     @override
     def _end_insert_children(
-        self, start: int, stop: int, node: Self | None = None
+        self, start: int, stop: int, node: Node | None = None
     ) -> None:
         node = self if node is None else node
         for o in self._observers:
@@ -763,7 +807,7 @@ class Root(Node):
 
     @override
     def _begin_remove_children(
-        self, start: int, stop: int, node: Self | None = None
+        self, start: int, stop: int, node: Node | None = None
     ) -> None:
         node = self if node is None else node
         for o in self._observers:
@@ -771,14 +815,14 @@ class Root(Node):
 
     @override
     def _end_remove_children(
-        self, start: int, stop: int, node: Self | None = None
+        self, start: int, stop: int, node: Node | None = None
     ) -> None:
         node = self if node is None else node
         for o in self._observers:
             o.nodes_removed(node, start, stop)
 
     @override
-    def _data_changed(self, node=None):
+    def _data_changed(self, node: Node | None = None) -> None:
         node = self if node is None else node
         for o in self._observers:
             o.data_changed(node)

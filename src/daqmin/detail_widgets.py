@@ -24,7 +24,7 @@ class NoSelectionWidget(DetailsWidget):
         super().__init__()
         label = QLabel("Nothing selected.")
         layout = QVBoxLayout()
-        layout.addWidget(label, 0, Qt.Alignment.AlignCenter)
+        layout.addWidget(label, 0, Qt.AlignmentFlag.AlignCenter)
         self.setLayout(layout)
 
 
@@ -43,13 +43,17 @@ class DefaultDetailsWidget(DetailsWidget):
 
 
 class TaskDetailsWidget(DetailsWidget):
+    _node: data_model.Task | None = None
+
     def __init__(self) -> None:
         super().__init__()
         self._clear_button = QPushButton("Clear Task")
 
         def clear_task():
+            assert self._node is not None
             task = self._node
             tasks = task.parent()
+            assert tasks is not None
             tasks.remove_child(task)
             task.clear_task()
 
@@ -60,11 +64,13 @@ class TaskDetailsWidget(DetailsWidget):
 
     @override
     def set_node(self, node: data_model.Node | None) -> None:
-        self._node = node
-        self._clear_button.setEnabled(node is not None)
+        self._node = node if isinstance(node, data_model.Task) else None
+        self._clear_button.setEnabled(self._node is not None)
 
 
 class TasksDetailsWidget(DetailsWidget):
+    _node: data_model.Tasks | None = None
+
     def __init__(self) -> None:
         super().__init__()
         self._create_button = QPushButton("Create Task...")
@@ -74,6 +80,7 @@ class TasksDetailsWidget(DetailsWidget):
                 self, "Create Task", "Task name:"
             )
             if ok:
+                assert self._node is not None
                 try:
                     self._node.create_task(name)
                 except nidaqmx.errors.DaqError as e:
@@ -86,11 +93,11 @@ class TasksDetailsWidget(DetailsWidget):
 
     @override
     def set_node(self, node: data_model.Node | None) -> None:
-        self._node = node
-        self._create_button.setEnabled(node is not None)
+        self._node = node if isinstance(node, data_model.Tasks) else None
+        self._create_button.setEnabled(self._node is not None)
 
 
-def _widget_type_for_node(node: data_model.Node | None) -> DetailsWidget:
+def _widget_type_for_node(node: data_model.Node | None) -> type[DetailsWidget]:
     if node is None:
         return NoSelectionWidget
     if isinstance(node, data_model.Task):

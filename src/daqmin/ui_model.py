@@ -3,7 +3,12 @@ import sys
 import traceback
 from typing import Any, override
 
-from qtpy.QtCore import QAbstractItemModel, QModelIndex, Qt
+from qtpy.QtCore import (
+    QAbstractItemModel,
+    QModelIndex,
+    QPersistentModelIndex,
+    Qt,
+)
 from qtpy.QtWidgets import QApplication
 
 from . import data_model
@@ -25,7 +30,12 @@ class ItemModel(QAbstractItemModel, data_model.Observer):
         self._dataroot.add_observer(self)
 
     @override
-    def index(self, row: int, col: int, parent: QModelIndex) -> QModelIndex:
+    def index(
+        self,
+        row: int,
+        col: int,
+        parent: QModelIndex | QPersistentModelIndex = QModelIndex(),
+    ) -> QModelIndex:
         with exceptions_logged():
             if not self.hasIndex(row, col, parent):
                 return QModelIndex()
@@ -38,7 +48,9 @@ class ItemModel(QAbstractItemModel, data_model.Observer):
             return self.createIndex(row, col, node)
 
     @override
-    def parent(self, index: QModelIndex) -> QModelIndex:
+    def parent(
+        self, index: QModelIndex | QPersistentModelIndex
+    ) -> QModelIndex:  # type: ignore[invalid-method-override]
         with exceptions_logged():
             if not index.isValid():
                 return QModelIndex()
@@ -50,7 +62,9 @@ class ItemModel(QAbstractItemModel, data_model.Observer):
             return self.createIndex(parent_row, 0, parent_node)
 
     @override
-    def rowCount(self, parent: QModelIndex) -> int:
+    def rowCount(
+        self, parent: QModelIndex | QPersistentModelIndex = QModelIndex()
+    ) -> int:
         with exceptions_logged():
             if not parent.isValid():
                 return self._dataroot.num_children()
@@ -60,13 +74,17 @@ class ItemModel(QAbstractItemModel, data_model.Observer):
             return parent_node.num_children()
 
     @override
-    def columnCount(self, parent: QModelIndex) -> int:
+    def columnCount(
+        self, parent: QModelIndex | QPersistentModelIndex = QModelIndex()
+    ) -> int:
         with exceptions_logged():
             return 2
 
     @override
     def data(
-        self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole
+        self,
+        index: QModelIndex | QPersistentModelIndex,
+        role: int = Qt.ItemDataRole.DisplayRole,
     ) -> Any:
         with exceptions_logged():
             if not index.isValid():

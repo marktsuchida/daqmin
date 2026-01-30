@@ -1,9 +1,9 @@
 import argparse
 import contextlib
 import importlib
+import importlib.util
 import os
 import re
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -275,4 +275,4 @@ else:
 
 
 if __name__ == "__main__":
-    main(sys.argv)
+    main()

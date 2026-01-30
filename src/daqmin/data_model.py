@@ -1,9 +1,13 @@
 from collections.abc import Callable, Sequence
 import time
-from typing import Any, Self, final, override
+from typing import Any, final, override
 import warnings
 
 import nidaqmx
+import nidaqmx.system
+import nidaqmx.system.device
+import nidaqmx.system.physical_channel
+import nidaqmx.task.triggering
 
 from . import attributes
 
@@ -13,7 +17,12 @@ class Node:
     Skeletal implementation of a node in the tree of DAQmx objects.
     """
 
-    def __init__(self, parent: Self | None, children: Sequence[Self]) -> None:
+    _parent: "Node | None"
+    _children: list["Node"]
+
+    def __init__(
+        self, parent: "Node | None", children: Sequence["Node"]
+    ) -> None:
         """
         parent: parent node, or None to indeicate the root node
         children: child nodes
@@ -28,14 +37,14 @@ class Node:
         return False
 
     @final
-    def parent(self) -> Self | None:
+    def parent(self) -> "Node | None":
         """
         Return the parent node, or None if this node is the root.
         """
         return self._parent
 
     @final
-    def children(self) -> tuple[Self, ...]:
+    def children(self) -> tuple["Node", ...]:
         """
         Return the child nodes in order, or an empty tuple if this node is a leaf.
         """
@@ -49,7 +58,7 @@ class Node:
         return len(self._children)
 
     @final
-    def child_index(self, child: Self) -> int:
+    def child_index(self, child: "Node") -> int:
         """
         Return the index of the given child; raise ValueError if not a child.
         """
@@ -63,7 +72,7 @@ class Node:
         self._end_remove_children(0, n_children)
 
     @final
-    def add_children(self, children: Sequence[Self]) -> None:
+    def add_children(self, children: Sequence["Node"]) -> None:
         # Children must already have parent set to self; should we set parent
         # here, or at least check?
         start = len(self._children)
@@ -73,7 +82,7 @@ class Node:
         self._end_insert_children(start, stop)
 
     @final
-    def remove_child(self, child: Self) -> None:
+    def remove_child(self, child: "Node") -> None:
         start = self.child_index(child)
         stop = start + 1
         self._begin_remove_children(start, stop)
@@ -91,52 +100,62 @@ class Node:
             child.accept(visitor)
 
     def _begin_insert_children(
-        self, start: int, stop: int, node: Self | None = None
+        self, start: int, stop: int, node: "Node | None" = None
     ) -> None:
         # Notify observers that a node (default: this node) is about to have
         # children inserted.
         # Non-root nodes just propagate to parent (as implemented here).
         # The Root overrides this to actually notify the observers.
         node = self if node is None else node
-        self.parent()._begin_insert_children(start, stop, node)
+        parent = self.parent()
+        assert parent is not None
+        parent._begin_insert_children(start, stop, node)
 
     def _end_insert_children(
-        self, start: int, stop: int, node: Self | None = None
+        self, start: int, stop: int, node: "Node | None" = None
     ) -> None:
         # Notify observers that a node (default: this node) has had children
         # inserted.
         # Non-root nodes just propagate to parent (as implemented here).
         # The Root overrides this to actually notify the observers.
         node = self if node is None else node
-        self.parent()._end_insert_children(start, stop, node)
+        parent = self.parent()
+        assert parent is not None
+        parent._end_insert_children(start, stop, node)
 
     def _begin_remove_children(
-        self, start: int, stop: int, node: Self | None = None
+        self, start: int, stop: int, node: "Node | None" = None
     ) -> None:
         # Notify observers that a node (default: this node) is about to have
         # children removed.
         # Non-root nodes just propagate to parent (as implemented here).
         # The Root overrides this to actually notify the observers.
         node = self if node is None else node
-        self.parent()._begin_remove_children(start, stop, node)
+        parent = self.parent()
+        assert parent is not None
+        parent._begin_remove_children(start, stop, node)
 
     def _end_remove_children(
-        self, start: int, stop: int, node: Self | None = None
+        self, start: int, stop: int, node: "Node | None" = None
     ) -> None:
         # Notify observers that a node (default: this node) has had children
         # removed.
         # Non-root nodes just propagate to parent (as implemented here).
         # The Root overrides this to actually notify the observers.
         node = self if node is None else node
-        self.parent()._end_remove_children(start, stop, node)
+        parent = self.parent()
+        assert parent is not None
+        parent._end_remove_children(start, stop, node)
 
-    def _data_changed(self, node: Self | None = None) -> None:
+    def _data_changed(self, node: "Node | None" = None) -> None:
         # Notify observers that the data of a node (default: this node) has
         # changed.
         # Non-root nodes just propagate to parent (as implemented here).
         # The Root overrides this to actually notify the observers.
         node = self if node is None else node
-        self.parent()._data_changed(node)
+        parent = self.parent()
+        assert parent is not None
+        parent._data_changed(node)
 
 
 class Visitor:
@@ -250,6 +269,7 @@ class Attribute(Node):
 
     def get(self) -> AttributeValue:
         self._ensure_cached()
+        assert self._cached is not None
         return self._cached
 
     def set(self, value) -> None:
@@ -323,8 +343,8 @@ class PhysChans(Node):
         metadata: dict[str, Any],
         parent: Node | None,
     ) -> None:
-        phys_chans = [PhysChan(phys_chan, self) for phys_chan in phys_chans]
-        super().__init__(parent, phys_chans)
+        children = [PhysChan(phys_chan, self) for phys_chan in phys_chans]
+        super().__init__(parent, children)
         self._name = metadata["py_name"]
 
     @override
@@ -760,32 +780,32 @@ class Root(Node):
     def clean_up(self) -> None:
         class CleanerUpper(Visitor):
             @override
-            def visit_task(self, task: Task) -> None:
-                task.clear_task()
+            def visit_task(self, node: Task) -> None:
+                node.clear_task()
 
         self.accept(CleanerUpper())
 
     def refresh_attributes(self) -> None:
         class AttributeRefresher(Visitor):
             @override
-            def visit_attribute(self, attr: Attribute) -> None:
-                attr.invalidate_cache()
+            def visit_attribute(self, node: Attribute) -> None:
+                node.invalidate_cache()
 
         self.accept(AttributeRefresher())
 
     def refresh_devices(self) -> None:
         class DeviceRefresher(Visitor):
             @override
-            def visit_devices(self, devices: Devices) -> None:
-                devices.refresh()
+            def visit_devices(self, node: Devices) -> None:
+                node.refresh()
 
         self.accept(DeviceRefresher())
 
     def create_task(self, name: str) -> None:
         class TaskCreator(Visitor):
             @override
-            def visit_tasks(self, tasks: Tasks) -> None:
-                tasks.create_task(name)
+            def visit_tasks(self, node: Tasks) -> None:
+                node.create_task(name)
 
         self.accept(TaskCreator())
 

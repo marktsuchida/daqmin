@@ -366,12 +366,8 @@ class Devices(Node):
         new_dev_names: list[str] = self._daqmx_system.devices.device_names
         new_devices: list[Device] = []
         for dev_name in new_dev_names:
-            try:
-                i = old_dev_names.index(dev_name)
-                device = self._cached_devices[i]
-            except ValueError:
-                daqmx_device = nidaqmx.system.device.Device(dev_name)
-                device = Device(dev_name, daqmx_device, self)
+            daqmx_device = nidaqmx.system.device.Device(dev_name)
+            device = Device(dev_name, daqmx_device, self)
             new_devices.append(device)
 
         if self.num_children() > 0:

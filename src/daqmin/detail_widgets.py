@@ -98,13 +98,15 @@ class TasksDetailsWidget(DetailsWidget):
 
 
 def _widget_type_for_node(node: data_model.Node | None) -> type[DetailsWidget]:
-    if node is None:
-        return NoSelectionWidget
-    if isinstance(node, data_model.Task):
-        return TaskDetailsWidget
-    if isinstance(node, data_model.Tasks):
-        return TasksDetailsWidget
-    return DefaultDetailsWidget
+    match node:
+        case None:
+            return NoSelectionWidget
+        case data_model.Task():
+            return TaskDetailsWidget
+        case data_model.Tasks():
+            return TasksDetailsWidget
+        case _:
+            return DefaultDetailsWidget
 
 
 class details_controller:

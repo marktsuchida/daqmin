@@ -18,8 +18,8 @@ build-backend = "hatchling.build"
 [dependency-groups]
 dev = [
     "cjdk>=0.3.0",
-    "glom>=24.11.0",
     "hatchling>=1.28.0",
+    "pydantic>=2.10.0",
     "pytest>=8.3.5",
     "pytest-qt>=4.4.0",
     "ty>=0.0.14",
@@ -33,7 +33,7 @@ genattrs = "daqmin.genattrs:main"
 path = "src/daqmin/genattrs.py"
 dependencies = [
     "cjdk>=0.3.0",
-    "glom>=24.11.0",
+    "pydantic>=2.10.0",
     "pyyaml>=6.0.2",
 ]
 

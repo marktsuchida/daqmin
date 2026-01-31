@@ -5,10 +5,11 @@ import importlib.util
 import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import cjdk
 import yaml
+from pydantic import BaseModel
 
 Module = Any
 
@@ -35,106 +36,137 @@ def normalize_help(text: str) -> str:
     return stripped + "." if stripped else ""
 
 
-def read_attrs_for_target(attr_metadata, target: str):
-    from glom import flatten, glom, Coalesce, Match, SKIP, T, Val
+class RawAttrDoc(BaseModel):
+    python_class_name: str
+    name: str
+    python_name: str | None = None
+    c_function_name: str
+    python_data_type: str
+    is_list: bool
+    enum: str | None = None
+    access: Literal["read", "write", "read-write"]
+    resettable: bool
+    python_description: str
 
-    return flatten(
-        glom(
-            attr_metadata,
-            (
-                category,
-                T.items(),
-                # Fold the attribute enum value into the dict:
-                [T[1] | {"enum_value": T[0]}],
-                # Extract attributes for the requested target:
-                [
-                    Match(
-                        {"python_class_name": target, str: object},
-                        default=SKIP,
-                    )
-                ],
-                # Extract and transform the fields that we want:
-                [
-                    {
-                        "target": "python_class_name",
-                        "category": Val(category),
-                        "name": "name",
-                        "py_name": Coalesce(
-                            "python_name", lambda d: d["name"].lower()
-                        ),
-                        "enum_value": "enum_value",
-                        "c_func": "c_function_name",
-                        "py_type": "python_data_type",
-                        "is_list": "is_list",
-                        "enum": Coalesce("enum", default=SKIP),
-                        "gettable": lambda d: (
-                            d["access"] in ("read", "read-write")
-                        ),
-                        "settable": lambda d: (
-                            d["access"] in ("read-write", "write")
-                        ),
-                        "resettable": "resettable",
-                        "py_help": ("python_description", normalize_help),
-                    },
-                ],
-            ),
+
+class RawEnumValueDoc(BaseModel):
+    description: str = ""
+    python_description: str | None = None
+
+
+class RawEnumValue(BaseModel):
+    name: str
+    python_name: str | None = None
+    value: int
+    documentation: RawEnumValueDoc | None = None
+
+
+class RawEnum(BaseModel):
+    python_name: str | None = None
+    values: list[RawEnumValue]
+
+
+class CookedAttr(BaseModel):
+    target: str
+    category: str
+    name: str
+    py_name: str
+    enum_value: str | int
+    c_func: str
+    py_type: str
+    is_list: bool
+    enum: str | None = None
+    gettable: bool
+    settable: bool
+    resettable: bool
+    py_help: str
+
+    @classmethod
+    def from_raw(
+        cls, raw: RawAttrDoc, category: str, enum_value: str | int
+    ) -> "CookedAttr":
+        return cls(
+            target=raw.python_class_name,
+            category=category,
+            name=raw.name,
+            py_name=raw.python_name or raw.name.lower(),
+            enum_value=enum_value,
+            c_func=raw.c_function_name,
+            py_type=raw.python_data_type,
+            is_list=raw.is_list,
+            enum=raw.enum,
+            gettable=raw.access in ("read", "read-write"),
+            settable=raw.access in ("read-write", "write"),
+            resettable=raw.resettable,
+            py_help=normalize_help(raw.python_description),
         )
-        for category in attr_metadata.keys()
-    )
 
 
-def read_enums(enum_metadata):
-    from glom import glom, Coalesce, Not, Regex, SKIP, T
+class CookedEnumValue(BaseModel):
+    name: str
+    py_name: str
+    enum_value: int
+    c_help: str | None = None
+    py_help: str | None = None
 
-    return glom(
-        enum_metadata,
-        (
-            T.items(),
-            # Fold the enum name into the dict:
-            [T[1] | {"name": T[0]}],
-            # Extract and transform the fields that we want:
-            [
-                {
-                    "c_name": "name",
-                    "py_name": Coalesce("python_name", "name"),
-                    "values": (
-                        "values",
-                        [
-                            {
-                                "name": "name",
-                                "py_name": Coalesce("python_name", "name"),
-                                "enum_value": "value",
-                                "c_help": Coalesce(
-                                    (
-                                        "documentation",
-                                        "description",
-                                        Not(Regex(r"\s*")),
-                                        normalize_help,
-                                    ),
-                                    default=SKIP,
-                                ),
-                                "py_help": Coalesce(
-                                    (
-                                        "documentation",
-                                        "python_description",
-                                        Not(Regex(r"\s*")),
-                                        normalize_help,
-                                    ),
-                                    (
-                                        "documentation",
-                                        "description",
-                                        Not(Regex(r"\s*")),
-                                        normalize_help,
-                                    ),
-                                    default=SKIP,
-                                ),
-                            }
-                        ],
-                    ),
-                }
-            ],
-        ),
-    )
+    @classmethod
+    def from_raw(cls, raw: RawEnumValue) -> "CookedEnumValue":
+        doc = raw.documentation
+        c_help = None
+        py_help = None
+        if doc:
+            desc = normalize_help(doc.description)
+            py_desc = (
+                normalize_help(doc.python_description)
+                if doc.python_description
+                else None
+            )
+            c_help = desc or None
+            py_help = py_desc or desc or None
+        return cls(
+            name=raw.name,
+            py_name=raw.python_name or raw.name,
+            enum_value=raw.value,
+            c_help=c_help,
+            py_help=py_help,
+        )
+
+
+class CookedEnum(BaseModel):
+    c_name: str
+    py_name: str
+    values: list[CookedEnumValue]
+
+    @classmethod
+    def from_raw(cls, name: str, raw: RawEnum) -> "CookedEnum":
+        return cls(
+            c_name=name,
+            py_name=raw.python_name or name,
+            values=[CookedEnumValue.from_raw(v) for v in raw.values],
+        )
+
+
+def read_attrs_for_target(
+    attr_metadata: dict[str, dict[str | int, dict]], target: str
+) -> list[dict]:
+    results = []
+    for category, attrs in attr_metadata.items():
+        for enum_value, attr_dict in attrs.items():
+            if attr_dict.get("python_class_name") != target:
+                continue
+            raw = RawAttrDoc.model_validate(attr_dict)
+            cooked = CookedAttr.from_raw(raw, category, enum_value)
+            results.append(cooked.model_dump(exclude_none=True))
+    return results
+
+
+def read_enums(enum_metadata: dict[str, dict]) -> list[dict]:
+    results = []
+    for name, enum_dict in enum_metadata.items():
+        raw = RawEnum.model_validate(enum_dict)
+        cooked = CookedEnum.from_raw(name, raw)
+        results.append(cooked.model_dump(exclude_none=True))
+    return results
 
 
 def patch_attrs(attrs) -> None:

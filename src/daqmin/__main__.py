@@ -49,6 +49,7 @@ def main():
         proxy_model.sort(0 if enabled else -1)
 
     sort_chkbox.stateChanged.connect(update_sorting)
+    sort_chkbox.setChecked(True)
 
     show_unsupported_chkbox = QCheckBox("Show unsupported")
 

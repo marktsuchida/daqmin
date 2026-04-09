@@ -2,6 +2,7 @@ from typing import override
 import nidaqmx
 from qtpy.QtCore import QAbstractProxyModel, QModelIndex, Qt
 from qtpy.QtWidgets import (
+    QDialog,
     QInputDialog,
     QLabel,
     QMessageBox,
@@ -10,6 +11,8 @@ from qtpy.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from .add_channel_dialog import AddChannelDialog
 
 from . import data_model
 
@@ -97,6 +100,45 @@ class TasksDetailsWidget(DetailsWidget):
         self._create_button.setEnabled(self._node is not None)
 
 
+class ChannelsDetailsWidget(DetailsWidget):
+    _node: data_model.Channels | None = None
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._add_button = QPushButton("Add Channel...")
+        self._add_button.clicked.connect(self._add_channel)
+        layout = QVBoxLayout()
+        layout.addWidget(self._add_button)
+        self.setLayout(layout)
+
+    def _add_channel(self) -> None:
+        assert self._node is not None
+        dialog = AddChannelDialog(
+            self,
+            locked_category=self._node.category(),
+        )
+        while True:
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+            result = dialog.result_data()
+            try:
+                self._node.add_channel(
+                    category=result.category,
+                    attr_target=result.attr_target,
+                    collection_attr=result.collection_attr,
+                    method_name=result.method_name,
+                    kwargs=result.kwargs,
+                )
+                return
+            except nidaqmx.errors.DaqError as e:
+                QMessageBox.warning(self, "Add Channel Error", str(e))
+
+    @override
+    def set_node(self, node: data_model.Node | None) -> None:
+        self._node = node if isinstance(node, data_model.Channels) else None
+        self._add_button.setEnabled(self._node is not None)
+
+
 def _widget_type_for_node(node: data_model.Node | None) -> type[DetailsWidget]:
     match node:
         case None:
@@ -105,6 +147,8 @@ def _widget_type_for_node(node: data_model.Node | None) -> type[DetailsWidget]:
             return TaskDetailsWidget
         case data_model.Tasks():
             return TasksDetailsWidget
+        case data_model.Channels():
+            return ChannelsDetailsWidget
         case _:
             return DefaultDetailsWidget
 

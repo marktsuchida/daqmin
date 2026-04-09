@@ -184,6 +184,9 @@ class Visitor:
     def visit_tasks(self, node: "Tasks") -> None:
         pass
 
+    def visit_channels(self, node: "Channels") -> None:
+        pass
+
 
 class Observer:
     """Node observer interface that can be registered with Root."""
@@ -334,6 +337,87 @@ class TaskCompleteAttribute(Attribute):
         super().__init__(
             target, metadata, parent, read_func=lambda t, p: t.is_task_done()
         )
+
+
+class Channel(Node):
+    """A virtual channel in a DAQmx task."""
+
+    def __init__(
+        self,
+        daqmx_channel: Any,
+        attr_target: str,
+        parent: Node,
+    ) -> None:
+        children: list[Node] = [
+            Attribute(daqmx_channel, md, self)
+            for md in (
+                attributes.attrs_for_target(attr_target)
+                + attributes.attrs_for_target("Channel")
+            )
+        ]
+        super().__init__(parent, children)
+        self._name = daqmx_channel.name
+
+    @override
+    def name(self) -> str:
+        return self._name
+
+
+class Channels(Node):
+    """The collection of virtual channels in a DAQmx task."""
+
+    def __init__(self, daqmx_task: nidaqmx.task.Task, parent: Node) -> None:
+        super().__init__(parent, ())
+        self._daqmx_task = daqmx_task
+        self._category: str | None = None
+        self._attr_target: str | None = None
+
+    @override
+    def name(self) -> str:
+        if self._category:
+            return f"{self._category}Channels ({self.num_children()})"
+        return f"Channels ({self.num_children()})"
+
+    def category(self) -> str | None:
+        return self._category
+
+    def daqmx_task(self) -> nidaqmx.task.Task:
+        return self._daqmx_task
+
+    def add_channel(
+        self,
+        category: str,
+        attr_target: str,
+        collection_attr: str,
+        method_name: str,
+        kwargs: dict[str, Any],
+    ) -> None:
+        collection = getattr(self._daqmx_task, collection_attr)
+        method = getattr(collection, method_name)
+        daqmx_channel = method(**kwargs)
+        if self._category is None:
+            self._category = category
+            self._attr_target = attr_target
+        chan = Channel(daqmx_channel, attr_target, self)
+        self.add_children((chan,))
+        self._data_changed()
+        self._refresh_task_attributes()
+
+    def _refresh_task_attributes(self) -> None:
+        task = self.parent()
+        assert task is not None
+
+        class _Refresher(Visitor):
+            @override
+            def visit_attribute(self, node: Attribute) -> None:
+                node.invalidate_cache()
+
+        task.accept(_Refresher())
+
+    @override
+    def accept(self, visitor: Visitor) -> None:
+        visitor.visit_channels(self)
+        super().accept(visitor)
 
 
 class PhysChan(Node):
@@ -710,6 +794,7 @@ class Task(Node):
             make_child(daqmx_task, md, self)
             for md in attributes.attrs_for_target("Task")
         ] + [
+            Channels(daqmx_task, self),
             ExportSignals(daqmx_task.export_signals, self),
             InStream(daqmx_task.in_stream, self),
             OutStream(daqmx_task.out_stream, self),

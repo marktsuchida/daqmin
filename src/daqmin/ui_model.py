@@ -7,6 +7,7 @@ from qtpy.QtCore import (
     QAbstractItemModel,
     QModelIndex,
     QPersistentModelIndex,
+    QSortFilterProxyModel,
     Qt,
 )
 from qtpy.QtWidgets import QApplication
@@ -176,3 +177,31 @@ class ItemModel(QAbstractItemModel, data_model.Observer):
             self._model_index_for_node(node),
             self._model_index_for_node(node, 1),
         )
+
+
+class DaqmxProxyModel(QSortFilterProxyModel):
+    def __init__(self) -> None:
+        super().__init__()
+        self._hide_unsupported = True
+
+    def set_hide_unsupported(self, hide: bool) -> None:
+        if hide != self._hide_unsupported:
+            self.beginFilterChange()
+            self._hide_unsupported = hide
+            self.endFilterChange()
+
+    @override
+    def filterAcceptsRow(
+        self,
+        source_row: int,
+        source_parent: QModelIndex | QPersistentModelIndex,
+    ) -> bool:
+        if self._hide_unsupported:
+            index = self.sourceModel().index(source_row, 0, source_parent)
+            node = index.internalPointer()
+            if (
+                isinstance(node, data_model.Attribute)
+                and node.is_unsupported()
+            ):
+                return False
+        return super().filterAcceptsRow(source_row, source_parent)

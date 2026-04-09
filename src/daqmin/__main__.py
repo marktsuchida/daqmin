@@ -3,7 +3,6 @@ import sys
 from qtpy.QtCore import (
     QModelIndex,
     QRegularExpression,
-    QSortFilterProxyModel,
     Qt,
 )
 from qtpy.QtWidgets import (
@@ -34,7 +33,7 @@ def main():
 
     raw_model = ui_model.ItemModel(datamodel)
 
-    proxy_model = QSortFilterProxyModel()
+    proxy_model = ui_model.DaqmxProxyModel()
     proxy_model.setSourceModel(raw_model)
     proxy_model.setFilterKeyColumn(0)
     proxy_model.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
@@ -51,6 +50,14 @@ def main():
 
     sort_chkbox.stateChanged.connect(update_sorting)
 
+    show_unsupported_chkbox = QCheckBox("Show unsupported")
+
+    def update_show_unsupported(state: int) -> None:
+        checked = state == Qt.CheckState.Checked.value
+        proxy_model.set_hide_unsupported(not checked)
+
+    show_unsupported_chkbox.stateChanged.connect(update_show_unsupported)
+
     filter_label = QLabel("Filter:")
 
     filter_line = QLineEdit()
@@ -59,6 +66,7 @@ def main():
     sort_filter_layout = QHBoxLayout()
     sort_filter_layout.addWidget(refresh_btn)
     sort_filter_layout.addWidget(sort_chkbox)
+    sort_filter_layout.addWidget(show_unsupported_chkbox)
     sort_filter_layout.addWidget(filter_label)
     sort_filter_layout.addWidget(filter_line)
 

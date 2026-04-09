@@ -9,7 +9,18 @@ import nidaqmx.system.device
 import nidaqmx.system.physical_channel
 import nidaqmx.task.triggering
 
+from nidaqmx.error_codes import DAQmxErrors
+
 from . import attributes
+
+UNSUPPORTED_ATTR_ERROR_CODES: frozenset[int] = frozenset(
+    {
+        DAQmxErrors.ATTR_NOT_SUPPORTED,
+        DAQmxErrors.ATTRIBUTE_NOT_SUPPORTED_IN_TASK_CONTEXT,
+        DAQmxErrors.INVALID_TEDS_PHYS_CHAN_NOT_AI,
+        DAQmxErrors.TEDS_SENSOR_NOT_DETECTED,
+    }
+)
 
 
 class Node:
@@ -218,6 +229,14 @@ class AttributeValue:
             return str(self._value)
         return str(self._error).split("\n", 1)[0]
 
+    def unsupported_error_code(self) -> int | None:
+        if self._error is None:
+            return None
+        code = getattr(self._error, "error_code", None)
+        if code is not None and code in UNSUPPORTED_ATTR_ERROR_CODES:
+            return code
+        return None
+
     def full_text(self) -> str:
         return str(self._value if self._value is not None else self._error)
 
@@ -286,6 +305,9 @@ class Attribute(Node):
             if not v.is_error():
                 return f"{self._prop_name} ({len(v.value())})"
         return self._prop_name
+
+    def is_unsupported(self) -> bool:
+        return self.get().unsupported_error_code() is not None
 
     @override
     def is_writable(self) -> bool:

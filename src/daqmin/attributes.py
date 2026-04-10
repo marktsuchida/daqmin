@@ -36,3 +36,12 @@ def _enum_data():
 
 def attrs_for_target(target: str) -> list[dict[str, Any]]:
     return _attr_data()[target]
+
+
+@functools.cache
+def _enum_index() -> dict[str, dict[str, Any]]:
+    return {e["c_name"]: e for e in _enum_data()}
+
+
+def enum_for_type(c_name: str) -> dict[str, Any] | None:
+    return _enum_index().get(c_name)

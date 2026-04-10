@@ -1,4 +1,5 @@
 from collections.abc import Callable, Sequence
+from enum import Enum
 import time
 from typing import Any, final, override
 import warnings
@@ -211,6 +212,14 @@ class Observer:
         pass
 
 
+def _format_value(v: object) -> str:
+    if isinstance(v, Enum):
+        return v.name
+    if isinstance(v, list):
+        return "[" + ", ".join(_format_value(item) for item in v) + "]"
+    return str(v)
+
+
 class AttributeValue:
     def __init__(self, *, value=None, error=None) -> None:
         if (value is None) == (error is None):
@@ -229,7 +238,7 @@ class AttributeValue:
 
     def one_line(self) -> str:
         if self._value is not None:
-            return str(self._value)
+            return _format_value(self._value)
         return str(self._error).split("\n", 1)[0]
 
     def unsupported_error_code(self) -> int | None:
@@ -241,7 +250,9 @@ class AttributeValue:
         return None
 
     def full_text(self) -> str:
-        return str(self._value if self._value is not None else self._error)
+        if self._value is not None:
+            return _format_value(self._value)
+        return str(self._error)
 
 
 class Attribute(Node):

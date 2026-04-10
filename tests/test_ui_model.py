@@ -1,10 +1,18 @@
+import enum
 from typing import override
+
 from qtpy.QtCore import QModelIndex
 from qtpy.QtTest import QSignalSpy
 
 from nidaqmx.errors import DaqError
 
 from daqmin import data_model, ui_model
+
+
+class _Color(enum.Enum):
+    RED = 1
+    GREEN = 2
+    BLUE = 3
 
 
 class SimpleNode(data_model.Node):
@@ -130,6 +138,21 @@ def test_attribute_value_unsupported_error_code():
 
     v_non_daq = data_model.AttributeValue(error=RuntimeError("boom"))
     assert v_non_daq.unsupported_error_code() is None
+
+
+def test_attribute_value_enum_display():
+    v = data_model.AttributeValue(value=_Color.RED)
+    assert v.one_line() == "RED"
+    assert v.full_text() == "RED"
+
+    v_list = data_model.AttributeValue(value=[_Color.RED, _Color.BLUE])
+    assert v_list.one_line() == "[RED, BLUE]"
+    assert v_list.full_text() == "[RED, BLUE]"
+
+    assert data_model.AttributeValue(value=42).one_line() == "42"
+    assert data_model.AttributeValue(value="hello").one_line() == "hello"
+    assert data_model.AttributeValue(value=[1, 2, 3]).one_line() == "[1, 2, 3]"
+    assert data_model.AttributeValue(value=[]).one_line() == "[]"
 
 
 def test_attribute_is_unsupported():

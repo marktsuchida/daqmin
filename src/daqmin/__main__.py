@@ -1,6 +1,7 @@
 import sys
 
 from qtpy.QtCore import (
+    QItemSelectionModel,
     QModelIndex,
     QRegularExpression,
     Qt,
@@ -81,6 +82,38 @@ def main():
     tree_view.selectionModel().currentRowChanged.connect(
         details_controller.on_current_row_changed
     )
+
+    def on_rows_inserted(parent: QModelIndex, first: int, last: int) -> None:
+        for row in range(first, last + 1):
+            idx = proxy_model.index(row, 0, parent)
+            src = proxy_model.mapToSource(idx)
+            node = src.internalPointer()
+            if isinstance(node, data_model.Task):
+                tree_view.expand(idx)
+                for i in range(proxy_model.rowCount(idx)):
+                    child_idx = proxy_model.index(i, 0, idx)
+                    child_src = proxy_model.mapToSource(child_idx)
+                    if isinstance(
+                        child_src.internalPointer(),
+                        data_model.Channels,
+                    ):
+                        tree_view.selectionModel().setCurrentIndex(
+                            child_idx,
+                            QItemSelectionModel.SelectionFlag.ClearAndSelect
+                            | QItemSelectionModel.SelectionFlag.Rows,
+                        )
+                        tree_view.scrollTo(child_idx)
+                        break
+            elif isinstance(node, data_model.Channel):
+                tree_view.expand(parent)
+                tree_view.selectionModel().setCurrentIndex(
+                    idx,
+                    QItemSelectionModel.SelectionFlag.ClearAndSelect
+                    | QItemSelectionModel.SelectionFlag.Rows,
+                )
+                tree_view.scrollTo(idx)
+
+    proxy_model.rowsInserted.connect(on_rows_inserted)
 
     def update_filter_re(regex: str) -> None:
         if QRegularExpression(regex).isValid():

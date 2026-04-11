@@ -405,12 +405,17 @@ class Channels(Node):
     ) -> None:
         collection = getattr(self._daqmx_task, collection_attr)
         method = getattr(collection, method_name)
-        daqmx_channel = method(**kwargs)
+        before = len(self._daqmx_task.channel_names)
+        method(**kwargs)
         if self._category is None:
             self._category = category
             self._attr_target = attr_target
-        chan = Channel(daqmx_channel, attr_target, self)
-        self.add_children((chan,))
+        after = len(self._daqmx_task.channel_names)
+        chans = tuple(
+            Channel(collection[i], attr_target, self)
+            for i in range(before, after)
+        )
+        self.add_children(chans)
         self._data_changed()
         self._refresh_task_attributes()
 

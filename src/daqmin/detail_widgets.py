@@ -592,6 +592,18 @@ def _widget_type_for_node(node: data_model.Node | None) -> type[DetailsWidget]:
             return DefaultDetailsWidget
 
 
+def _node_breadcrumb(node: data_model.Node | None) -> str:
+    if node is None:
+        return ""
+    parts: list[str] = []
+    cur: data_model.Node | None = node
+    while cur is not None and cur.parent() is not None:
+        parts.append(cur.name())
+        cur = cur.parent()
+    parts.reverse()
+    return " \u203a ".join(parts)
+
+
 class details_controller:
     """
     Observes the tree view selection and connects and disconnects data model
@@ -601,12 +613,20 @@ class details_controller:
     def __init__(self, proxy_model: QAbstractProxyModel) -> None:
         self._model = proxy_model
         self._widget: DetailsWidget = NoSelectionWidget()
-        # Use a QStackedWidget to simplify wholsesale replacement of widget.
         self._stacked = QStackedWidget()
         self._stacked.addWidget(self._widget)
 
+        self._breadcrumb = QLabel()
+
+        self._container = QWidget()
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self._breadcrumb)
+        layout.addWidget(self._stacked)
+        self._container.setLayout(layout)
+
     def details_widget(self) -> QWidget:
-        return self._stacked
+        return self._container
 
     def _update_widget(self, node: data_model.Node | None):
         widget_type = _widget_type_for_node(node)
@@ -618,6 +638,7 @@ class details_controller:
             self._widget = widget_type()
             self._widget.set_node(node)
             self._stacked.addWidget(self._widget)
+        self._breadcrumb.setText(_node_breadcrumb(node))
 
     def on_current_row_changed(
         self, current: QModelIndex, previous: QModelIndex | None = None

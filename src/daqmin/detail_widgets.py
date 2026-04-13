@@ -270,7 +270,7 @@ class AttributeDetailsWidget(DetailsWidget):
     def _set_value_display(self, val: data_model.AttributeValue) -> None:
         if val.is_error():
             self._value_key.setText("Error:")
-            self._value_label.setText(str(val.error()))
+            self._value_label.setText(val.full_text())
             self._value_key.setStyleSheet("color: orange")
             self._value_label.setStyleSheet("color: orange")
         else:

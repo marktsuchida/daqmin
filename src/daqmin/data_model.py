@@ -239,10 +239,18 @@ class AttributeValue:
     def error(self) -> Any:
         return self._error
 
-    def one_line(self) -> str:
+    def full_text(self) -> str:
         if self._value is not None:
             return _format_value(self._value)
-        return str(self._error).split("\n", 1)[0]
+        if self.is_python_api_missing():
+            return "Not supported by the NI-DAQmx Python API"
+        return str(self._error)
+
+    def one_line(self) -> str:
+        return self.full_text().split("\n", 1)[0]
+
+    def is_python_api_missing(self) -> bool:
+        return isinstance(self._error, AttributeError)
 
     def unsupported_error_code(self) -> int | None:
         if self._error is None:
@@ -251,11 +259,6 @@ class AttributeValue:
         if code is not None and code in UNSUPPORTED_ATTR_ERROR_CODES:
             return code
         return None
-
-    def full_text(self) -> str:
-        if self._value is not None:
-            return _format_value(self._value)
-        return str(self._error)
 
 
 class Attribute(Node):
@@ -324,7 +327,10 @@ class Attribute(Node):
         return self._prop_name
 
     def is_unsupported(self) -> bool:
-        return self.get().unsupported_error_code() is not None
+        v = self.get()
+        return (
+            v.unsupported_error_code() is not None or v.is_python_api_missing()
+        )
 
     @override
     def is_writable(self) -> bool:

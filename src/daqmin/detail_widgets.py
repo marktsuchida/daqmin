@@ -7,11 +7,9 @@ from qtpy.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
     QCheckBox,
-    QDialog,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
-    QInputDialog,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -25,8 +23,7 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from .add_channel_dialog import AddChannelDialog
-
+from . import actions
 from . import attributes
 from . import data_model
 
@@ -65,19 +62,14 @@ class TaskDetailsWidget(DetailsWidget):
     def __init__(self) -> None:
         super().__init__()
         self._clear_button = QPushButton("Clear Task")
-
-        def clear_task():
-            assert self._node is not None
-            task = self._node
-            tasks = task.parent()
-            assert tasks is not None
-            tasks.remove_child(task)
-            task.clear_task()
-
-        self._clear_button.clicked.connect(clear_task)
+        self._clear_button.clicked.connect(self._on_clear)
         layout = QVBoxLayout()
         layout.addWidget(self._clear_button)
         self.setLayout(layout)
+
+    def _on_clear(self) -> None:
+        assert self._node is not None
+        actions.clear_task(self._node)
 
     @override
     def set_node(self, node: data_model.Node | None) -> None:
@@ -91,22 +83,14 @@ class TasksDetailsWidget(DetailsWidget):
     def __init__(self) -> None:
         super().__init__()
         self._create_button = QPushButton("Create Task...")
-
-        def create_task():
-            name, ok = QInputDialog().getText(
-                self, "Create Task", "Task name:"
-            )
-            if ok:
-                assert self._node is not None
-                try:
-                    self._node.create_task(name)
-                except nidaqmx.errors.DaqError as e:
-                    QMessageBox.warning(self, "Create Task Error", str(e))
-
-        self._create_button.clicked.connect(create_task)
+        self._create_button.clicked.connect(self._on_create)
         layout = QVBoxLayout()
         layout.addWidget(self._create_button)
         self.setLayout(layout)
+
+    def _on_create(self) -> None:
+        assert self._node is not None
+        actions.create_task(self._node, self)
 
     @override
     def set_node(self, node: data_model.Node | None) -> None:
@@ -127,25 +111,7 @@ class ChannelsDetailsWidget(DetailsWidget):
 
     def _add_channel(self) -> None:
         assert self._node is not None
-        dialog = AddChannelDialog(
-            self,
-            locked_category=self._node.category(),
-        )
-        while True:
-            if dialog.exec() != QDialog.DialogCode.Accepted:
-                return
-            result = dialog.result_data()
-            try:
-                self._node.add_channel(
-                    category=result.category,
-                    attr_target=result.attr_target,
-                    collection_attr=result.collection_attr,
-                    method_name=result.method_name,
-                    kwargs=result.kwargs,
-                )
-                return
-            except nidaqmx.errors.DaqError as e:
-                QMessageBox.warning(self, "Add Channel Error", str(e))
+        actions.add_channel(self._node, self)
 
     @override
     def set_node(self, node: data_model.Node | None) -> None:

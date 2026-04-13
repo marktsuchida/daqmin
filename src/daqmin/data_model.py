@@ -853,6 +853,14 @@ class Tasks(Node):
         self.add_children((task,))
         self._data_changed()
 
+    def clear_all_tasks(self) -> None:
+        tasks = list(self.children())
+        self.remove_all_children()
+        for task in tasks:
+            assert isinstance(task, Task)
+            task.clear_task()
+        self._data_changed()
+
 
 class ThisProcess(Node):
     """Container for DAQmx items belonging to the current process."""

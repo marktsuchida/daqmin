@@ -13,6 +13,7 @@ from qtpy.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMenu,
     QPushButton,
     QSplitter,
     QTreeView,
@@ -20,7 +21,7 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from . import data_model, detail_widgets, ui_model
+from . import actions, data_model, detail_widgets, ui_model
 
 
 def main():
@@ -77,6 +78,54 @@ def main():
     tree_view.setColumnWidth(0, 256)
 
     tree_view.expandRecursively(QModelIndex(), 2)
+
+    tree_view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+
+    def on_context_menu(pos):
+        idx = tree_view.indexAt(pos)
+        if not idx.isValid():
+            return
+        src = proxy_model.mapToSource(idx)
+        node = src.internalPointer()
+
+        menu = QMenu(tree_view)
+
+        match node:
+            case data_model.Tasks():
+                menu.addAction(
+                    "Create Task...",
+                    lambda: actions.create_task(node, tree_view),
+                )
+                clear_all = menu.addAction(
+                    "Clear All Tasks",
+                    lambda: actions.clear_all_tasks(node, tree_view),
+                )
+                clear_all.setEnabled(node.num_children() > 0)
+            case data_model.Task():
+                menu.addAction(
+                    "Clear Task",
+                    lambda: actions.clear_task(node),
+                )
+                channels = next(
+                    c
+                    for c in node.children()
+                    if isinstance(c, data_model.Channels)
+                )
+                menu.addAction(
+                    "Add Channel...",
+                    lambda: actions.add_channel(channels, tree_view),
+                )
+            case data_model.Channels():
+                menu.addAction(
+                    "Add Channel...",
+                    lambda: actions.add_channel(node, tree_view),
+                )
+            case _:
+                return
+
+        menu.exec(tree_view.viewport().mapToGlobal(pos))
+
+    tree_view.customContextMenuRequested.connect(on_context_menu)
 
     details_controller = detail_widgets.details_controller(proxy_model)
     tree_view.selectionModel().currentRowChanged.connect(

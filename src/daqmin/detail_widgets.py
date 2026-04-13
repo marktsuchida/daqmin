@@ -206,9 +206,9 @@ class AttributeDetailsWidget(DetailsWidget):
 
         # Enum table
         self._enum_table = QTableWidget()
-        self._enum_table.setColumnCount(4)
+        self._enum_table.setColumnCount(5)
         self._enum_table.setHorizontalHeaderLabels(
-            ["", "Python Name", "C Name", "Value"]
+            ["", "Python Name", "C Name", "Value", "Description"]
         )
         self._enum_table.setSelectionMode(
             QAbstractItemView.SelectionMode.NoSelection
@@ -220,6 +220,7 @@ class AttributeDetailsWidget(DetailsWidget):
         self._enum_table.verticalHeader().setVisible(False)
         header = self._enum_table.horizontalHeader()
         assert header is not None
+        header.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft)
         header.setStretchLastSection(True)
         self._enum_table.hide()
         layout.addWidget(self._enum_table)
@@ -341,6 +342,11 @@ class AttributeDetailsWidget(DetailsWidget):
                 i,
                 3,
                 QTableWidgetItem(str(v["enum_value"])),
+            )
+            self._enum_table.setItem(
+                i,
+                4,
+                QTableWidgetItem(v.get("py_help", "")),
             )
         self._enum_table.resizeColumnsToContents()
         header = self._enum_table.horizontalHeader()

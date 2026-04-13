@@ -328,26 +328,15 @@ class AttributeDetailsWidget(DetailsWidget):
                 self._btn_group.addButton(btn, int_val)
             btn.setEnabled(writable)
             self._enum_table.setCellWidget(i, 0, btn)
-            self._enum_table.setItem(
-                i,
-                1,
-                QTableWidgetItem(v["py_name"]),
-            )
-            self._enum_table.setItem(
-                i,
-                2,
-                QTableWidgetItem(v["name"]),
-            )
-            self._enum_table.setItem(
-                i,
-                3,
-                QTableWidgetItem(str(v["enum_value"])),
-            )
-            self._enum_table.setItem(
-                i,
-                4,
-                QTableWidgetItem(v.get("py_help", "")),
-            )
+            for col, text in (
+                (1, v["py_name"]),
+                (2, v["name"]),
+                (3, str(v["enum_value"])),
+                (4, v.get("py_help", "")),
+            ):
+                item = QTableWidgetItem(text)
+                item.setToolTip(text)
+                self._enum_table.setItem(i, col, item)
         self._enum_table.resizeColumnsToContents()
         header = self._enum_table.horizontalHeader()
         assert header is not None

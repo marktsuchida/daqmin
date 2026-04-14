@@ -243,7 +243,7 @@ class AttributeValue:
         if self._value is not None:
             return _format_value(self._value)
         if self.is_python_api_missing():
-            return "Not supported by the NI-DAQmx Python API"
+            return "Not supported by the installed version of NI-DAQmx"
         return str(self._error)
 
     def one_line(self) -> str:

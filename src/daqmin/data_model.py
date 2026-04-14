@@ -5,6 +5,7 @@ from typing import Any, final, override
 import warnings
 
 import nidaqmx
+import nidaqmx.constants
 import nidaqmx.system
 import nidaqmx.system.device
 import nidaqmx.system.physical_channel
@@ -13,6 +14,8 @@ import nidaqmx.task.triggering
 from nidaqmx.error_codes import DAQmxErrors
 
 from . import attributes
+
+MULTIPLE_VALUES: object = object()
 
 UNSUPPORTED_ATTR_ERROR_CODES: frozenset[int] = frozenset(
     {
@@ -429,20 +432,26 @@ class Channels(Node):
         self._refresh_task_attributes()
 
     def _refresh_task_attributes(self) -> None:
-        task = self.parent()
-        assert task is not None
-
-        class _Refresher(Visitor):
-            @override
-            def visit_attribute(self, node: Attribute) -> None:
-                node.invalidate_cache()
-
-        task.accept(_Refresher())
+        _refresh_task_attributes(self)
 
     @override
     def accept(self, visitor: Visitor) -> None:
         visitor.visit_channels(self)
         super().accept(visitor)
+
+
+def _refresh_task_attributes(node: Node) -> None:
+    ancestor: Node | None = node
+    while ancestor is not None and not isinstance(ancestor, Task):
+        ancestor = ancestor.parent()
+    assert ancestor is not None
+
+    class _Refresher(Visitor):
+        @override
+        def visit_attribute(self, node: Attribute) -> None:
+            node.invalidate_cache()
+
+    ancestor.accept(_Refresher())
 
 
 class PhysChan(Node):
@@ -451,6 +460,7 @@ class PhysChan(Node):
     def __init__(
         self,
         daqmx_phys_chan: nidaqmx.system.physical_channel.PhysicalChannel,
+        channel_type_prefix: str,
         parent: Node | None,
     ) -> None:
         attrs = [
@@ -459,10 +469,94 @@ class PhysChan(Node):
         ]
         super().__init__(parent, attrs)
         self._name = daqmx_phys_chan.name
+        self._channel_type_prefix = channel_type_prefix
 
     @override
     def name(self) -> str:
         return self._name
+
+    def channel_type_prefix(self) -> str:
+        return self._channel_type_prefix
+
+    def _device_name(self) -> str:
+        return self._name.split("/")[0]
+
+    def get_analog_power_up_state(self) -> Any:
+        system = nidaqmx.system.System.local()
+        states = system.get_analog_power_up_states_with_output_type(
+            [self._name]
+        )
+        return states[0] if states else None
+
+    def set_analog_power_up_state(
+        self,
+        voltage: float,
+        channel_type: nidaqmx.constants.PowerUpChannelType,
+    ) -> None:
+        from nidaqmx.types import AOPowerUpState
+
+        system = nidaqmx.system.System.local()
+        system.set_analog_power_up_states_with_output_type(
+            [AOPowerUpState(self._name, voltage, channel_type)]
+        )
+
+    def get_digital_pull_up_pull_down_state(self) -> Any:
+        system = nidaqmx.system.System.local()
+        states = system.get_digital_pull_up_pull_down_states(
+            self._device_name()
+        )
+        prefix = self._name + "/"
+        matches = [
+            s
+            for s in states
+            if s.physical_channel == self._name
+            or s.physical_channel.startswith(prefix)
+        ]
+        if not matches:
+            return None
+        first = matches[0].power_up_state
+        if all(m.power_up_state == first for m in matches):
+            return matches[0]
+        return MULTIPLE_VALUES
+
+    def set_digital_pull_up_pull_down_state(
+        self, state: nidaqmx.constants.ResistorState
+    ) -> None:
+        from nidaqmx.types import DOResistorPowerUpState
+
+        system = nidaqmx.system.System.local()
+        system.set_digital_pull_up_pull_down_states(
+            self._device_name(),
+            [DOResistorPowerUpState(self._name, state)],
+        )
+
+    def get_digital_power_up_state(self) -> Any:
+        system = nidaqmx.system.System.local()
+        states = system.get_digital_power_up_states(self._device_name())
+        prefix = self._name + "/"
+        matches = [
+            s
+            for s in states
+            if s.physical_channel == self._name
+            or s.physical_channel.startswith(prefix)
+        ]
+        if not matches:
+            return None
+        first = matches[0].power_up_state
+        if all(m.power_up_state == first for m in matches):
+            return matches[0]
+        return MULTIPLE_VALUES
+
+    def set_digital_power_up_state(
+        self, state: nidaqmx.constants.PowerUpStates
+    ) -> None:
+        from nidaqmx.types import DOPowerUpState
+
+        system = nidaqmx.system.System.local()
+        system.set_digital_power_up_states(
+            self._device_name(),
+            [DOPowerUpState(self._name, state)],
+        )
 
 
 class PhysChans(Node):
@@ -474,9 +568,12 @@ class PhysChans(Node):
         metadata: dict[str, Any],
         parent: Node | None,
     ) -> None:
-        children = [PhysChan(phys_chan, self) for phys_chan in phys_chans]
-        super().__init__(parent, children)
         self._name = metadata["py_name"]
+        prefix = self._name.split("_")[0]
+        children = [
+            PhysChan(phys_chan, prefix, self) for phys_chan in phys_chans
+        ]
+        super().__init__(parent, children)
 
     @override
     def name(self) -> str:
@@ -521,6 +618,26 @@ class Device(Node):
     @override
     def name(self) -> str:
         return self._name
+
+    def reset_device(self) -> None:
+        self._daqmx_device.reset_device()
+
+    def self_test_device(self) -> None:
+        self._daqmx_device.self_test_device()
+
+    def get_digital_logic_family(
+        self,
+    ) -> nidaqmx.constants.LogicFamily:
+        system = nidaqmx.system.System.local()
+        return system.get_digital_logic_family_power_up_state(self._name)
+
+    def set_digital_logic_family(
+        self, logic_family: nidaqmx.constants.LogicFamily
+    ) -> None:
+        system = nidaqmx.system.System.local()
+        system.set_digital_logic_family_power_up_state(
+            self._name, logic_family
+        )
 
 
 class Devices(Node):
@@ -597,6 +714,20 @@ class System(Node):
     def name(self) -> str:
         return "System"
 
+    def connect_terms(
+        self,
+        source: str,
+        dest: str,
+        modifiers: nidaqmx.constants.SignalModifiers,
+    ) -> None:
+        self._daqmx_system.connect_terms(source, dest, modifiers)
+
+    def disconnect_terms(self, source: str, dest: str) -> None:
+        self._daqmx_system.disconnect_terms(source, dest)
+
+    def tristate_output_term(self, terminal: str) -> None:
+        self._daqmx_system.tristate_output_term(terminal)
+
 
 class ExportSignals(Node):
     """A DAQmx task's collection of exported signal attributes."""
@@ -611,10 +742,19 @@ class ExportSignals(Node):
                 for md in attributes.attrs_for_target("ExportSignals")
             ],
         )
+        self._daqmx_exsigs = daqmx_exsigs
 
     @override
     def name(self) -> str:
         return "export_signals"
+
+    def export_signal(
+        self,
+        signal_id: nidaqmx.constants.Signal,
+        output_terminal: str,
+    ) -> None:
+        self._daqmx_exsigs.export_signal(signal_id, output_terminal)
+        _refresh_task_attributes(self)
 
 
 class InStream(Node):
@@ -655,7 +795,15 @@ class OutStream(Node):
         return "out_stream"
 
 
-class Timing(Node):
+class _ConfigurableNode(Node):
+    _daqmx_configurable: Any
+
+    def configure(self, method_name: str, kwargs: dict[str, Any]) -> None:
+        getattr(self._daqmx_configurable, method_name)(**kwargs)
+        _refresh_task_attributes(self)
+
+
+class Timing(_ConfigurableNode):
     """A DAQmx task's collection of timing attributes."""
 
     def __init__(
@@ -668,6 +816,7 @@ class Timing(Node):
                 for md in attributes.attrs_for_target("Timing")
             ],
         )
+        self._daqmx_configurable = daqmx_timing
 
     @override
     def name(self) -> str:
@@ -737,7 +886,7 @@ class PauseTrigger(Node):
         return "pause_trigger"
 
 
-class ReferenceTrigger(Node):
+class ReferenceTrigger(_ConfigurableNode):
     """A DAQmx task's collection of reference trigger attributes."""
 
     def __init__(
@@ -752,13 +901,14 @@ class ReferenceTrigger(Node):
                 for md in attributes.attrs_for_target("ReferenceTrigger")
             ],
         )
+        self._daqmx_configurable = daqmx_reference_trigger
 
     @override
     def name(self) -> str:
         return "reference_trigger"
 
 
-class StartTrigger(Node):
+class StartTrigger(_ConfigurableNode):
     """A DAQmx task's collection of start trigger attributes."""
 
     def __init__(
@@ -773,6 +923,7 @@ class StartTrigger(Node):
                 for md in attributes.attrs_for_target("StartTrigger")
             ],
         )
+        self._daqmx_configurable = daqmx_start_trigger
 
     @override
     def name(self) -> str:
@@ -837,6 +988,10 @@ class Task(Node):
     def accept(self, visitor: Visitor) -> None:
         visitor.visit_task(self)
         super().accept(visitor)
+
+    def control(self, action: nidaqmx.constants.TaskMode) -> None:
+        self._daqmx_task.control(action)
+        _refresh_task_attributes(self)
 
     def clear_task(self) -> None:
         self._daqmx_task.close()

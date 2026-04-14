@@ -4,27 +4,26 @@ from typing import Any
 import nidaqmx.system
 
 from qtpy.QtCore import Qt
-from qtpy.QtGui import QDoubleValidator
 from qtpy.QtWidgets import (
     QComboBox,
-    QCheckBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
     QFrame,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QScrollArea,
-    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
 
-from .channel_variants import (
-    CATEGORIES,
-    CategoryInfo,
+from .channel_variants import CATEGORIES, CategoryInfo
+from .param_widgets import (
     ParamSpec,
     VariantDescriptor,
+    get_widget_value,
+    rebuild_param_form,
 )
 
 
@@ -35,49 +34,6 @@ class AddChannelResult:
     collection_attr: str
     method_name: str
     kwargs: dict[str, Any]
-
-
-def _create_widget_for_param(param: ParamSpec) -> QWidget:
-    if param.is_enum:
-        combo = QComboBox()
-        enum_class = type(param.default)
-        for member in enum_class:
-            combo.addItem(member.name, member)
-        idx = list(enum_class).index(param.default)
-        combo.setCurrentIndex(idx)
-        return combo
-    if isinstance(param.default, bool):
-        cb = QCheckBox()
-        cb.setChecked(param.default)
-        return cb
-    if isinstance(param.default, float):
-        edit = QLineEdit(str(param.default))
-        edit.setValidator(QDoubleValidator())
-        return edit
-    if isinstance(param.default, int) and not param.is_required:
-        spin = QSpinBox()
-        spin.setRange(-(2**31), 2**31 - 1)
-        spin.setValue(param.default)
-        return spin
-    edit = QLineEdit()
-    if not param.is_required and isinstance(param.default, str):
-        edit.setText(param.default)
-    return edit
-
-
-def _get_widget_value(widget: QWidget, param: ParamSpec) -> Any:
-    if isinstance(widget, QComboBox):
-        return widget.currentData()
-    if isinstance(widget, QCheckBox):
-        return widget.isChecked()
-    if isinstance(widget, QSpinBox):
-        return widget.value()
-    if isinstance(widget, QLineEdit):
-        text = widget.text()
-        if isinstance(param.default, float):
-            return float(text)
-        return text
-    raise TypeError(f"Unexpected widget: {type(widget)}")
 
 
 def _populate_phys_chans(combo: QComboBox, phys_chan_attr: str) -> None:
@@ -214,16 +170,9 @@ class AddChannelDialog(QDialog):
         self._rebuild_params(variant)
 
     def _rebuild_params(self, variant: VariantDescriptor) -> None:
-        self._param_widgets.clear()
-        while self._params_layout.rowCount() > 0:
-            self._params_layout.removeRow(0)
-        for param in variant.params:
-            widget = _create_widget_for_param(param)
-            label = param.name.replace("_", " ").title()
-            if param.is_required:
-                label += " *"
-            self._params_layout.addRow(label + ":", widget)
-            self._param_widgets.append((param, widget))
+        self._param_widgets = rebuild_param_form(
+            self._params_layout, variant.params
+        )
 
     def _on_accept(self) -> None:
         cat = self._current_category()
@@ -234,8 +183,12 @@ class AddChannelDialog(QDialog):
         kwargs: dict[str, Any] = {}
         kwargs[variant.first_param_name] = self._phys_chan_combo.currentText()
         kwargs[variant.name_param_name] = self._name_edit.text()
-        for param, widget in self._param_widgets:
-            kwargs[param.name] = _get_widget_value(widget, param)
+        try:
+            for param, widget in self._param_widgets:
+                kwargs[param.name] = get_widget_value(widget, param)
+        except (ValueError, TypeError) as e:
+            QMessageBox.warning(self, "Invalid Parameter", str(e))
+            return
 
         self._result = AddChannelResult(
             category=cat.label,

@@ -1,7 +1,5 @@
-import enum
 import inspect
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, replace
 
 from nidaqmx.task.collections import (
     AIChannelCollection,
@@ -12,22 +10,7 @@ from nidaqmx.task.collections import (
     DOChannelCollection,
 )
 
-
-@dataclass(frozen=True)
-class ParamSpec:
-    name: str
-    default: Any
-    is_enum: bool
-    is_required: bool
-
-
-@dataclass(frozen=True)
-class VariantDescriptor:
-    label: str
-    method_name: str
-    first_param_name: str
-    name_param_name: str
-    params: tuple[ParamSpec, ...]
+from .param_widgets import VariantDescriptor, make_variant_from_method
 
 
 @dataclass(frozen=True)
@@ -46,39 +29,32 @@ def _make_variant(
     method_name: str,
     label: str,
 ) -> VariantDescriptor:
-    method = getattr(collection_class, method_name)
-    sig = inspect.signature(method)
-    params: list[ParamSpec] = []
+    sig = inspect.signature(getattr(collection_class, method_name))
+    skip = {"self"}
     first_param_name = ""
     name_param_name = ""
     first_seen = False
-    for pname, p in sig.parameters.items():
+    for pname in sig.parameters:
         if pname == "self":
             continue
         if not first_seen:
             first_param_name = pname
+            skip.add(pname)
             first_seen = True
             continue
         if pname.startswith("name_to_assign"):
             name_param_name = pname
-            continue
-        has_default = p.default is not inspect.Parameter.empty
-        params.append(
-            ParamSpec(
-                name=pname,
-                default=p.default,
-                is_enum=(
-                    isinstance(p.default, enum.Enum) if has_default else False
-                ),
-                is_required=not has_default,
-            )
-        )
-    return VariantDescriptor(
-        label=label,
-        method_name=method_name,
+            skip.add(pname)
+    vd = make_variant_from_method(
+        collection_class,
+        method_name,
+        label,
+        skip_params=frozenset(skip),
+    )
+    return replace(
+        vd,
         first_param_name=first_param_name,
         name_param_name=name_param_name,
-        params=tuple(params),
     )
 
 

@@ -1,3 +1,4 @@
+from collections.abc import Callable, Sequence
 from typing import Any, override
 
 import nidaqmx
@@ -7,7 +8,9 @@ from qtpy.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
     QCheckBox,
+    QComboBox,
     QFormLayout,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -62,11 +65,30 @@ class TaskDetailsWidget(DetailsWidget):
 
     def __init__(self) -> None:
         super().__init__()
+        layout = QVBoxLayout()
+
+        self._control_buttons: list[QPushButton] = []
+        for label, mode in actions.TASK_MODES:
+            btn = QPushButton(label)
+            btn.clicked.connect(lambda checked, m=mode: self._on_control(m))
+            layout.addWidget(btn)
+            self._control_buttons.append(btn)
+
+        separator = QFrame()
+        separator.setFrameShape(QFrame.Shape.HLine)
+        separator.setFrameShadow(QFrame.Shadow.Sunken)
+        layout.addWidget(separator)
+
         self._clear_button = QPushButton("Clear Task")
         self._clear_button.clicked.connect(self._on_clear)
-        layout = QVBoxLayout()
         layout.addWidget(self._clear_button)
+
+        layout.addStretch()
         self.setLayout(layout)
+
+    def _on_control(self, mode: nidaqmx.constants.TaskMode) -> None:
+        assert self._node is not None
+        actions.control_task(self._node, mode, self)
 
     def _on_clear(self) -> None:
         assert self._node is not None
@@ -75,7 +97,10 @@ class TaskDetailsWidget(DetailsWidget):
     @override
     def set_node(self, node: data_model.Node | None) -> None:
         self._node = node if isinstance(node, data_model.Task) else None
-        self._clear_button.setEnabled(self._node is not None)
+        enabled = self._node is not None
+        for btn in self._control_buttons:
+            btn.setEnabled(enabled)
+        self._clear_button.setEnabled(enabled)
 
 
 class TasksDetailsWidget(DetailsWidget):
@@ -118,6 +143,403 @@ class ChannelsDetailsWidget(DetailsWidget):
     def set_node(self, node: data_model.Node | None) -> None:
         self._node = node if isinstance(node, data_model.Channels) else None
         self._add_button.setEnabled(self._node is not None)
+
+
+class SingleButtonDetailsWidget(DetailsWidget):
+    _node: data_model.Node | None = None
+
+    def __init__(
+        self,
+        label: str,
+        node_type: type[data_model.Node],
+        action: Callable[..., None],
+    ) -> None:
+        super().__init__()
+        self._node_type = node_type
+        self._action = action
+        self._btn = QPushButton(label)
+        self._btn.clicked.connect(self._on_click)
+        layout = QVBoxLayout()
+        layout.addWidget(self._btn)
+        layout.addStretch()
+        self.setLayout(layout)
+
+    def _on_click(self) -> None:
+        assert self._node is not None
+        self._action(self._node, self)
+
+    @override
+    def set_node(self, node: data_model.Node | None) -> None:
+        self._node = node if isinstance(node, self._node_type) else None
+        self._btn.setEnabled(self._node is not None)
+
+
+class TimingDetailsWidget(SingleButtonDetailsWidget):
+    def __init__(self) -> None:
+        super().__init__(
+            "Configure Timing...",
+            data_model.Timing,
+            actions.configure_timing,
+        )
+
+
+class StartTriggerDetailsWidget(SingleButtonDetailsWidget):
+    def __init__(self) -> None:
+        super().__init__(
+            "Configure Start Trigger...",
+            data_model.StartTrigger,
+            actions.configure_start_trigger,
+        )
+
+
+class ReferenceTriggerDetailsWidget(SingleButtonDetailsWidget):
+    def __init__(self) -> None:
+        super().__init__(
+            "Configure Reference Trigger...",
+            data_model.ReferenceTrigger,
+            actions.configure_reference_trigger,
+        )
+
+
+class ExportSignalsDetailsWidget(SingleButtonDetailsWidget):
+    def __init__(self) -> None:
+        super().__init__(
+            "Export Signal...",
+            data_model.ExportSignals,
+            actions.export_signal,
+        )
+
+
+class DeviceDetailsWidget(DetailsWidget):
+    _node: data_model.Device | None = None
+
+    def __init__(self) -> None:
+        super().__init__()
+        layout = QVBoxLayout()
+
+        self._reset_btn = QPushButton("Reset Device")
+        self._reset_btn.clicked.connect(self._on_reset)
+        layout.addWidget(self._reset_btn)
+
+        self._self_test_btn = QPushButton("Self-Test")
+        self._self_test_btn.clicked.connect(self._on_self_test)
+        layout.addWidget(self._self_test_btn)
+
+        self._logic_group = QGroupBox("Logic Family Power-Up State")
+        logic_layout = QVBoxLayout(self._logic_group)
+        self._logic_error_label = QLabel()
+        self._logic_error_label.setWordWrap(True)
+        self._logic_error_label.setStyleSheet("color: orange")
+        self._logic_error_label.hide()
+        logic_layout.addWidget(self._logic_error_label)
+        self._logic_combo = QComboBox()
+        for member in nidaqmx.constants.LogicFamily:
+            self._logic_combo.addItem(member.name, member)
+        logic_layout.addWidget(self._logic_combo)
+        self._logic_set_btn = QPushButton("Set Logic Family")
+        self._logic_set_btn.clicked.connect(self._on_set_logic)
+        logic_layout.addWidget(self._logic_set_btn)
+        self._logic_widgets: tuple[QWidget, ...] = (
+            self._logic_combo,
+            self._logic_set_btn,
+        )
+        layout.addWidget(self._logic_group)
+
+        layout.addStretch()
+        self.setLayout(layout)
+
+    def _on_reset(self) -> None:
+        assert self._node is not None
+        actions.reset_device(self._node, self)
+
+    def _on_self_test(self) -> None:
+        assert self._node is not None
+        actions.self_test_device(self._node, self)
+
+    def _on_set_logic(self) -> None:
+        assert self._node is not None
+        logic_family = self._logic_combo.currentData()
+        actions.set_digital_logic_family(self._node, logic_family, self)
+        self.set_node(self._node)
+
+    @override
+    def set_node(self, node: data_model.Node | None) -> None:
+        self._node = node if isinstance(node, data_model.Device) else None
+        enabled = self._node is not None
+        self._reset_btn.setEnabled(enabled)
+        self._self_test_btn.setEnabled(enabled)
+        if self._node is not None:
+            try:
+                current = self._node.get_digital_logic_family()
+            except nidaqmx.errors.DaqError as e:
+                self._logic_error_label.setText(str(e))
+                self._logic_error_label.show()
+                for w in self._logic_widgets:
+                    w.setEnabled(False)
+            else:
+                self._logic_error_label.hide()
+                for w in self._logic_widgets:
+                    w.setEnabled(True)
+                idx = self._logic_combo.findData(current)
+                if idx >= 0:
+                    self._logic_combo.setCurrentIndex(idx)
+        else:
+            self._logic_error_label.hide()
+            for w in self._logic_widgets:
+                w.setEnabled(False)
+
+
+class SystemDetailsWidget(DetailsWidget):
+    _node: data_model.System | None = None
+
+    def __init__(self) -> None:
+        super().__init__()
+        layout = QVBoxLayout()
+
+        self._connect_btn = QPushButton("Connect Terminals...")
+        self._connect_btn.clicked.connect(self._on_connect)
+        layout.addWidget(self._connect_btn)
+
+        self._disconnect_btn = QPushButton("Disconnect Terminals...")
+        self._disconnect_btn.clicked.connect(self._on_disconnect)
+        layout.addWidget(self._disconnect_btn)
+
+        self._tristate_btn = QPushButton("Tristate Output Terminal...")
+        self._tristate_btn.clicked.connect(self._on_tristate)
+        layout.addWidget(self._tristate_btn)
+
+        layout.addStretch()
+        self.setLayout(layout)
+
+    def _on_connect(self) -> None:
+        assert self._node is not None
+        actions.connect_terminals(self._node, self)
+
+    def _on_disconnect(self) -> None:
+        assert self._node is not None
+        actions.disconnect_terminals(self._node, self)
+
+    def _on_tristate(self) -> None:
+        assert self._node is not None
+        actions.tristate_output_terminal(self._node, self)
+
+    @override
+    def set_node(self, node: data_model.Node | None) -> None:
+        self._node = node if isinstance(node, data_model.System) else None
+        enabled = self._node is not None
+        self._connect_btn.setEnabled(enabled)
+        self._disconnect_btn.setEnabled(enabled)
+        self._tristate_btn.setEnabled(enabled)
+
+
+class PhysChanDetailsWidget(DetailsWidget):
+    _node: data_model.PhysChan | None = None
+
+    def __init__(self) -> None:
+        super().__init__()
+        layout = QVBoxLayout()
+
+        # Analog output power-up state
+        self._ao_group = QGroupBox("Analog Power-Up State")
+        ao_layout = QFormLayout(self._ao_group)
+        self._ao_error_label = QLabel()
+        self._ao_error_label.setWordWrap(True)
+        self._ao_error_label.setStyleSheet("color: orange")
+        self._ao_error_label.hide()
+        ao_layout.addRow(self._ao_error_label)
+        self._ao_voltage = QLineEdit()
+        ao_layout.addRow("Power Up State:", self._ao_voltage)
+        self._ao_type_combo = QComboBox()
+        for m in nidaqmx.constants.PowerUpChannelType:
+            self._ao_type_combo.addItem(m.name, m)
+        ao_layout.addRow("Channel Type:", self._ao_type_combo)
+        self._ao_set_btn = QPushButton("Set Power-Up State")
+        self._ao_set_btn.clicked.connect(self._on_set_ao)
+        ao_layout.addRow(self._ao_set_btn)
+        self._ao_widgets: tuple[QWidget, ...] = (
+            self._ao_voltage,
+            self._ao_type_combo,
+            self._ao_set_btn,
+        )
+        layout.addWidget(self._ao_group)
+
+        # Digital power-up state
+        self._do_group = QGroupBox("Digital Power-Up State")
+        do_layout = QFormLayout(self._do_group)
+        self._do_error_label = QLabel()
+        self._do_error_label.setWordWrap(True)
+        self._do_error_label.setStyleSheet("color: orange")
+        self._do_error_label.hide()
+        do_layout.addRow(self._do_error_label)
+        self._do_combo = QComboBox()
+        for m in nidaqmx.constants.PowerUpStates:
+            self._do_combo.addItem(m.name, m)
+        self._do_combo.setPlaceholderText("Multiple Values")
+        do_layout.addRow("Power Up State:", self._do_combo)
+        self._do_set_btn = QPushButton("Set Power-Up State")
+        self._do_set_btn.clicked.connect(self._on_set_do)
+        do_layout.addRow(self._do_set_btn)
+        self._do_widgets: tuple[QWidget, ...] = (
+            self._do_combo,
+            self._do_set_btn,
+        )
+        layout.addWidget(self._do_group)
+
+        # Digital pull-up/pull-down state
+        self._dig_group = QGroupBox("Pull-Up/Pull-Down State")
+        dig_layout = QFormLayout(self._dig_group)
+        self._dig_error_label = QLabel()
+        self._dig_error_label.setWordWrap(True)
+        self._dig_error_label.setStyleSheet("color: orange")
+        self._dig_error_label.hide()
+        dig_layout.addRow(self._dig_error_label)
+        self._dig_combo = QComboBox()
+        for m in nidaqmx.constants.ResistorState:
+            self._dig_combo.addItem(m.name, m)
+        self._dig_combo.setPlaceholderText("Multiple Values")
+        dig_layout.addRow("State:", self._dig_combo)
+        self._dig_set_btn = QPushButton("Set Pull-Up/Pull-Down State")
+        self._dig_set_btn.clicked.connect(self._on_set_dig)
+        dig_layout.addRow(self._dig_set_btn)
+        self._dig_widgets: tuple[QWidget, ...] = (
+            self._dig_combo,
+            self._dig_set_btn,
+        )
+        layout.addWidget(self._dig_group)
+
+        layout.addStretch()
+        self.setLayout(layout)
+
+    def _on_set_ao(self) -> None:
+        assert self._node is not None
+        try:
+            voltage = float(self._ao_voltage.text())
+        except ValueError:
+            QMessageBox.warning(
+                self, "Invalid Value", "Voltage must be a number."
+            )
+            return
+        channel_type = self._ao_type_combo.currentData()
+        actions.set_analog_power_up_state(
+            self._node, voltage, channel_type, self
+        )
+        self.set_node(self._node)
+
+    def _on_set_do(self) -> None:
+        assert self._node is not None
+        state = self._do_combo.currentData()
+        if state is None:
+            return
+        actions.set_digital_power_up_state(self._node, state, self)
+        self.set_node(self._node)
+
+    def _on_set_dig(self) -> None:
+        assert self._node is not None
+        state = self._dig_combo.currentData()
+        if state is None:
+            return
+        actions.set_digital_pull_state(self._node, state, self)
+        self.set_node(self._node)
+
+    def _set_group_state(
+        self,
+        error_label: QLabel,
+        widgets: Sequence[QWidget],
+        error: str | None,
+    ) -> None:
+        if error is not None:
+            error_label.setText(error)
+            error_label.show()
+            for w in widgets:
+                w.setEnabled(False)
+        else:
+            error_label.hide()
+            for w in widgets:
+                w.setEnabled(True)
+
+    @override
+    def set_node(self, node: data_model.Node | None) -> None:
+        self._node = node if isinstance(node, data_model.PhysChan) else None
+        self._ao_group.hide()
+        self._do_group.hide()
+        self._dig_group.hide()
+        if self._node is None:
+            return
+        prefix = self._node.channel_type_prefix()
+        if prefix == "ao":
+            self._ao_group.show()
+            try:
+                state = self._node.get_analog_power_up_state()
+            except nidaqmx.errors.DaqError as e:
+                self._set_group_state(
+                    self._ao_error_label,
+                    self._ao_widgets,
+                    str(e),
+                )
+                return
+            self._set_group_state(self._ao_error_label, self._ao_widgets, None)
+            if state is not None:
+                self._ao_voltage.setText(str(state.power_up_state))
+                try:
+                    ct = nidaqmx.constants.PowerUpChannelType(
+                        state.channel_type
+                    )
+                except ValueError:
+                    ct = state.channel_type
+                idx = self._ao_type_combo.findData(ct)
+                if idx >= 0:
+                    self._ao_type_combo.setCurrentIndex(idx)
+        elif prefix in ("di", "do"):
+            self._do_group.show()
+            try:
+                state = self._node.get_digital_power_up_state()
+            except nidaqmx.errors.DaqError as e:
+                self._set_group_state(
+                    self._do_error_label,
+                    self._do_widgets,
+                    str(e),
+                )
+            else:
+                self._set_group_state(
+                    self._do_error_label,
+                    self._do_widgets,
+                    None,
+                )
+                if state is data_model.MULTIPLE_VALUES:
+                    self._do_combo.setCurrentIndex(-1)
+                elif state is not None:
+                    try:
+                        ps = nidaqmx.constants.PowerUpStates(
+                            state.power_up_state
+                        )
+                    except ValueError:
+                        ps = state.power_up_state
+                    idx = self._do_combo.findData(ps)
+                    if idx >= 0:
+                        self._do_combo.setCurrentIndex(idx)
+            self._dig_group.show()
+            try:
+                state = self._node.get_digital_pull_up_pull_down_state()
+            except nidaqmx.errors.DaqError as e:
+                self._set_group_state(
+                    self._dig_error_label,
+                    self._dig_widgets,
+                    str(e),
+                )
+                return
+            self._set_group_state(
+                self._dig_error_label, self._dig_widgets, None
+            )
+            if state is data_model.MULTIPLE_VALUES:
+                self._dig_combo.setCurrentIndex(-1)
+            elif state is not None:
+                try:
+                    rs = nidaqmx.constants.ResistorState(state.power_up_state)
+                except ValueError:
+                    rs = state.power_up_state
+                idx = self._dig_combo.findData(rs)
+                if idx >= 0:
+                    self._dig_combo.setCurrentIndex(idx)
 
 
 def _editable_type(meta: dict[str, Any]) -> str | None:
@@ -559,6 +981,20 @@ def _widget_type_for_node(node: data_model.Node | None) -> type[DetailsWidget]:
             return TasksDetailsWidget
         case data_model.Channels():
             return ChannelsDetailsWidget
+        case data_model.Timing():
+            return TimingDetailsWidget
+        case data_model.StartTrigger():
+            return StartTriggerDetailsWidget
+        case data_model.ReferenceTrigger():
+            return ReferenceTriggerDetailsWidget
+        case data_model.ExportSignals():
+            return ExportSignalsDetailsWidget
+        case data_model.Device():
+            return DeviceDetailsWidget
+        case data_model.System():
+            return SystemDetailsWidget
+        case data_model.PhysChan():
+            return PhysChanDetailsWidget
         case data_model.Attribute():
             return AttributeDetailsWidget
         case _:

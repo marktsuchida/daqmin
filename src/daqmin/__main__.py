@@ -104,10 +104,6 @@ def main():
                 )
                 clear_all.setEnabled(node.num_children() > 0)
             case data_model.Task():
-                menu.addAction(
-                    "Clear Task",
-                    lambda: actions.clear_task(node),
-                )
                 channels = next(
                     c
                     for c in node.children()
@@ -117,10 +113,67 @@ def main():
                     "Add Channel...",
                     lambda: actions.add_channel(channels, tree_view),
                 )
+                menu.addSeparator()
+                for label, mode in actions.TASK_MODES:
+                    menu.addAction(
+                        label,
+                        lambda m=mode: actions.control_task(
+                            node, m, tree_view
+                        ),
+                    )
+                menu.addSeparator()
+                menu.addAction(
+                    "Clear Task",
+                    lambda: actions.clear_task(node),
+                )
             case data_model.Channels():
                 menu.addAction(
                     "Add Channel...",
                     lambda: actions.add_channel(node, tree_view),
+                )
+            case data_model.Timing():
+                menu.addAction(
+                    "Configure Timing...",
+                    lambda: actions.configure_timing(node, tree_view),
+                )
+            case data_model.StartTrigger():
+                menu.addAction(
+                    "Configure Start Trigger...",
+                    lambda: actions.configure_start_trigger(node, tree_view),
+                )
+            case data_model.ReferenceTrigger():
+                menu.addAction(
+                    "Configure Reference Trigger...",
+                    lambda: actions.configure_reference_trigger(
+                        node, tree_view
+                    ),
+                )
+            case data_model.ExportSignals():
+                menu.addAction(
+                    "Export Signal...",
+                    lambda: actions.export_signal(node, tree_view),
+                )
+            case data_model.Device():
+                menu.addAction(
+                    "Reset Device",
+                    lambda: actions.reset_device(node, tree_view),
+                )
+                menu.addAction(
+                    "Self-Test",
+                    lambda: actions.self_test_device(node, tree_view),
+                )
+            case data_model.System():
+                menu.addAction(
+                    "Connect Terminals...",
+                    lambda: actions.connect_terminals(node, tree_view),
+                )
+                menu.addAction(
+                    "Disconnect Terminals...",
+                    lambda: actions.disconnect_terminals(node, tree_view),
+                )
+                menu.addAction(
+                    "Tristate Output Terminal...",
+                    lambda: actions.tristate_output_terminal(node, tree_view),
                 )
             case _:
                 return

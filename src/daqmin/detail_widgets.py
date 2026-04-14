@@ -25,6 +25,7 @@ from qtpy.QtWidgets import (
 
 from . import actions
 from . import attributes
+from . import c_header
 from . import data_model
 
 
@@ -319,6 +320,7 @@ class AttributeDetailsWidget(DetailsWidget):
         if not is_list:
             self._btn_group = QButtonGroup(self)
             self._btn_group.setExclusive(True)
+        any_c_name = False
         for i, v in enumerate(values):
             int_val = v["enum_value"]
             if is_list:
@@ -328,15 +330,21 @@ class AttributeDetailsWidget(DetailsWidget):
                 self._btn_group.addButton(btn, int_val)
             btn.setEnabled(writable)
             self._enum_table.setCellWidget(i, 0, btn)
+            c_name = c_header.lookup_enum_val_c_name(
+                enum_name, v["name"], int_val
+            )
+            if c_name is not None:
+                any_c_name = True
             for col, text in (
                 (1, v["py_name"]),
-                (2, v["name"]),
+                (2, c_name or ""),
                 (3, str(v["enum_value"])),
                 (4, v.get("py_help", "")),
             ):
                 item = QTableWidgetItem(text)
                 item.setToolTip(text)
                 self._enum_table.setItem(i, col, item)
+        self._enum_table.setColumnHidden(2, not any_c_name)
         self._enum_table.resizeColumnsToContents()
         header = self._enum_table.horizontalHeader()
         assert header is not None
@@ -531,10 +539,14 @@ class AttributeDetailsWidget(DetailsWidget):
                 self._c_form.addRow("Reset:", QLabel(f"DAQmxReset{c_func}()"))
         attr_id = meta.get("enum_value")
         if attr_id is not None:
-            self._c_form.addRow(
-                "Attribute ID:",
-                QLabel(f"{attr_id} (0x{attr_id:04X})"),
+            c_macro = c_header.lookup_attr_c_name(
+                meta.get("c_func", ""), attr_id
             )
+            if c_macro is not None:
+                id_text = f"{c_macro} = {attr_id} (0x{attr_id:04X})"
+            else:
+                id_text = f"{attr_id} (0x{attr_id:04X})"
+            self._c_form.addRow("Attribute ID:", QLabel(id_text))
 
 
 def _widget_type_for_node(node: data_model.Node | None) -> type[DetailsWidget]:

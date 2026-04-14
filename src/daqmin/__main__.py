@@ -21,11 +21,13 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from . import actions, data_model, detail_widgets, ui_model
+from . import actions, c_header, data_model, detail_widgets, ui_model
 
 
 def main():
     app = QApplication(sys.argv)
+
+    c_header.init()
 
     datamodel = data_model.Root(
         [data_model.System(None), data_model.ThisProcess(None)]

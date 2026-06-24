@@ -1,5 +1,6 @@
 from collections.abc import Callable, Sequence
-from typing import Any, override
+from dataclasses import dataclass
+from typing import Any, cast, override
 
 import nidaqmx
 import nidaqmx.constants
@@ -971,34 +972,165 @@ class AttributeDetailsWidget(DetailsWidget):
             self._c_form.addRow("Attribute ID:", QLabel(id_text))
 
 
+SEPARATOR = object()  # sentinel for a context-menu separator
+
+
+@dataclass(frozen=True)
+class MenuItem:
+    label: str
+    callback: Callable[[], None]
+    enabled: bool = True
+
+
+@dataclass(frozen=True)
+class _NodeUI:
+    widget: type[DetailsWidget]
+    menu: Callable[[data_model.Node, QWidget], list] | None = None
+
+
+def _tasks_menu(node, parent):
+    return [
+        MenuItem("Create Task...", lambda: actions.create_task(node, parent)),
+        MenuItem(
+            "Clear All Tasks",
+            lambda: actions.clear_all_tasks(node, parent),
+            enabled=node.num_children() > 0,
+        ),
+    ]
+
+
+def _task_menu(node, parent):
+    channels = next(
+        c for c in node.children() if isinstance(c, data_model.Channels)
+    )
+    items = [
+        MenuItem(
+            "Add Channel...", lambda: actions.add_channel(channels, parent)
+        ),
+        SEPARATOR,
+    ]
+    for label, mode in actions.TASK_MODES:
+        items.append(
+            MenuItem(
+                label, lambda m=mode: actions.control_task(node, m, parent)
+            )
+        )
+    items.append(SEPARATOR)
+    items.append(MenuItem("Clear Task", lambda: actions.clear_task(node)))
+    return items
+
+
+def _channels_menu(node, parent):
+    return [
+        MenuItem("Add Channel...", lambda: actions.add_channel(node, parent)),
+    ]
+
+
+def _timing_menu(node, parent):
+    return [
+        MenuItem(
+            "Configure Timing...",
+            lambda: actions.configure_timing(node, parent),
+        ),
+    ]
+
+
+def _start_trigger_menu(node, parent):
+    return [
+        MenuItem(
+            "Configure Start Trigger...",
+            lambda: actions.configure_start_trigger(node, parent),
+        ),
+    ]
+
+
+def _reference_trigger_menu(node, parent):
+    return [
+        MenuItem(
+            "Configure Reference Trigger...",
+            lambda: actions.configure_reference_trigger(node, parent),
+        ),
+    ]
+
+
+def _export_signals_menu(node, parent):
+    return [
+        MenuItem(
+            "Export Signal...",
+            lambda: actions.export_signal(node, parent),
+        ),
+    ]
+
+
+def _device_menu(node, parent):
+    return [
+        MenuItem("Reset Device", lambda: actions.reset_device(node, parent)),
+        MenuItem("Self-Test", lambda: actions.self_test_device(node, parent)),
+    ]
+
+
+def _system_menu(node, parent):
+    return [
+        MenuItem(
+            "Connect Terminals...",
+            lambda: actions.connect_terminals(node, parent),
+        ),
+        MenuItem(
+            "Disconnect Terminals...",
+            lambda: actions.disconnect_terminals(node, parent),
+        ),
+        MenuItem(
+            "Tristate Output Terminal...",
+            lambda: actions.tristate_output_terminal(node, parent),
+        ),
+    ]
+
+
+_NODE_UI: dict[type[data_model.Node], _NodeUI] = {
+    data_model.Task: _NodeUI(TaskDetailsWidget, _task_menu),
+    data_model.Tasks: _NodeUI(TasksDetailsWidget, _tasks_menu),
+    data_model.Channels: _NodeUI(ChannelsDetailsWidget, _channels_menu),
+    data_model.Timing: _NodeUI(TimingDetailsWidget, _timing_menu),
+    data_model.StartTrigger: _NodeUI(
+        StartTriggerDetailsWidget, _start_trigger_menu
+    ),
+    data_model.ReferenceTrigger: _NodeUI(
+        ReferenceTriggerDetailsWidget, _reference_trigger_menu
+    ),
+    data_model.ExportSignals: _NodeUI(
+        ExportSignalsDetailsWidget, _export_signals_menu
+    ),
+    data_model.Device: _NodeUI(DeviceDetailsWidget, _device_menu),
+    data_model.System: _NodeUI(SystemDetailsWidget, _system_menu),
+    data_model.PhysChan: _NodeUI(PhysChanDetailsWidget),
+    data_model.Attribute: _NodeUI(AttributeDetailsWidget),
+}
+
+
+def _node_ui(node: data_model.Node | None) -> _NodeUI | None:
+    if node is None:
+        return None
+    for klass in type(node).__mro__:
+        ui = _NODE_UI.get(cast(type[data_model.Node], klass))
+        if ui is not None:
+            return ui
+    return None
+
+
 def _widget_type_for_node(node: data_model.Node | None) -> type[DetailsWidget]:
-    match node:
-        case None:
-            return NoSelectionWidget
-        case data_model.Task():
-            return TaskDetailsWidget
-        case data_model.Tasks():
-            return TasksDetailsWidget
-        case data_model.Channels():
-            return ChannelsDetailsWidget
-        case data_model.Timing():
-            return TimingDetailsWidget
-        case data_model.StartTrigger():
-            return StartTriggerDetailsWidget
-        case data_model.ReferenceTrigger():
-            return ReferenceTriggerDetailsWidget
-        case data_model.ExportSignals():
-            return ExportSignalsDetailsWidget
-        case data_model.Device():
-            return DeviceDetailsWidget
-        case data_model.System():
-            return SystemDetailsWidget
-        case data_model.PhysChan():
-            return PhysChanDetailsWidget
-        case data_model.Attribute():
-            return AttributeDetailsWidget
-        case _:
-            return DefaultDetailsWidget
+    if node is None:
+        return NoSelectionWidget
+    ui = _node_ui(node)
+    return ui.widget if ui is not None else DefaultDetailsWidget
+
+
+def context_menu_items(node: data_model.Node | None, parent: QWidget) -> list:
+    if node is None:
+        return []
+    ui = _node_ui(node)
+    if ui is None or ui.menu is None:
+        return []
+    return ui.menu(node, parent)
 
 
 def _node_breadcrumb(node: data_model.Node | None) -> str:

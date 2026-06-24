@@ -21,7 +21,7 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from . import actions, c_header, data_model, detail_widgets, ui_model
+from . import c_header, data_model, detail_widgets, ui_model
 
 
 def main():
@@ -90,94 +90,16 @@ def main():
         src = proxy_model.mapToSource(idx)
         node = src.internalPointer()
 
+        items = detail_widgets.context_menu_items(node, tree_view)
+        if not items:
+            return
         menu = QMenu(tree_view)
-
-        match node:
-            case data_model.Tasks():
-                menu.addAction(
-                    "Create Task...",
-                    lambda: actions.create_task(node, tree_view),
-                )
-                clear_all = menu.addAction(
-                    "Clear All Tasks",
-                    lambda: actions.clear_all_tasks(node, tree_view),
-                )
-                clear_all.setEnabled(node.num_children() > 0)
-            case data_model.Task():
-                channels = next(
-                    c
-                    for c in node.children()
-                    if isinstance(c, data_model.Channels)
-                )
-                menu.addAction(
-                    "Add Channel...",
-                    lambda: actions.add_channel(channels, tree_view),
-                )
+        for item in items:
+            if item is detail_widgets.SEPARATOR:
                 menu.addSeparator()
-                for label, mode in actions.TASK_MODES:
-                    menu.addAction(
-                        label,
-                        lambda m=mode: actions.control_task(
-                            node, m, tree_view
-                        ),
-                    )
-                menu.addSeparator()
-                menu.addAction(
-                    "Clear Task",
-                    lambda: actions.clear_task(node),
-                )
-            case data_model.Channels():
-                menu.addAction(
-                    "Add Channel...",
-                    lambda: actions.add_channel(node, tree_view),
-                )
-            case data_model.Timing():
-                menu.addAction(
-                    "Configure Timing...",
-                    lambda: actions.configure_timing(node, tree_view),
-                )
-            case data_model.StartTrigger():
-                menu.addAction(
-                    "Configure Start Trigger...",
-                    lambda: actions.configure_start_trigger(node, tree_view),
-                )
-            case data_model.ReferenceTrigger():
-                menu.addAction(
-                    "Configure Reference Trigger...",
-                    lambda: actions.configure_reference_trigger(
-                        node, tree_view
-                    ),
-                )
-            case data_model.ExportSignals():
-                menu.addAction(
-                    "Export Signal...",
-                    lambda: actions.export_signal(node, tree_view),
-                )
-            case data_model.Device():
-                menu.addAction(
-                    "Reset Device",
-                    lambda: actions.reset_device(node, tree_view),
-                )
-                menu.addAction(
-                    "Self-Test",
-                    lambda: actions.self_test_device(node, tree_view),
-                )
-            case data_model.System():
-                menu.addAction(
-                    "Connect Terminals...",
-                    lambda: actions.connect_terminals(node, tree_view),
-                )
-                menu.addAction(
-                    "Disconnect Terminals...",
-                    lambda: actions.disconnect_terminals(node, tree_view),
-                )
-                menu.addAction(
-                    "Tristate Output Terminal...",
-                    lambda: actions.tristate_output_terminal(node, tree_view),
-                )
-            case _:
-                return
-
+            else:
+                action = menu.addAction(item.label, item.callback)
+                action.setEnabled(item.enabled)
         menu.exec(tree_view.viewport().mapToGlobal(pos))
 
     tree_view.customContextMenuRequested.connect(on_context_menu)

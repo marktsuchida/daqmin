@@ -85,9 +85,11 @@ class Node:
     @final
     def remove_all_children(self) -> None:
         n_children = self.num_children()
-        self._begin_remove_children(0, n_children)
+        self._notify(
+            lambda o: o.nodes_about_to_be_removed(self, 0, n_children)
+        )
         self._children.clear()
-        self._end_remove_children(0, n_children)
+        self._notify(lambda o: o.nodes_removed(self, 0, n_children))
 
     @final
     def add_children(self, children: Sequence["Node"]) -> None:
@@ -95,17 +97,17 @@ class Node:
         # here, or at least check?
         start = len(self._children)
         stop = start + len(children)
-        self._begin_insert_children(start, stop)
+        self._notify(lambda o: o.nodes_about_to_be_inserted(self, start, stop))
         self._children.extend(children)
-        self._end_insert_children(start, stop)
+        self._notify(lambda o: o.nodes_inserted(self, start, stop))
 
     @final
     def remove_child(self, child: "Node") -> None:
         start = self.child_index(child)
         stop = start + 1
-        self._begin_remove_children(start, stop)
+        self._notify(lambda o: o.nodes_about_to_be_removed(self, start, stop))
         self._children.remove(child)
-        self._end_remove_children(start, stop)
+        self._notify(lambda o: o.nodes_removed(self, start, stop))
 
     def walk(self) -> Iterator["Node"]:
         """Yield this node and all descendants, pre-order."""
@@ -113,63 +115,15 @@ class Node:
         for child in self.children():
             yield from child.walk()
 
-    def _begin_insert_children(
-        self, start: int, stop: int, node: "Node | None" = None
-    ) -> None:
-        # Notify observers that a node (default: this node) is about to have
-        # children inserted.
-        # Non-root nodes just propagate to parent (as implemented here).
-        # The Root overrides this to actually notify the observers.
-        node = self if node is None else node
+    def _notify(self, fn: "Callable[[Observer], None]") -> None:
+        # Bubble the notification toward the Root, which dispatches to
+        # observers. Non-root nodes just propagate to the parent.
         parent = self.parent()
         assert parent is not None
-        parent._begin_insert_children(start, stop, node)
+        parent._notify(fn)
 
-    def _end_insert_children(
-        self, start: int, stop: int, node: "Node | None" = None
-    ) -> None:
-        # Notify observers that a node (default: this node) has had children
-        # inserted.
-        # Non-root nodes just propagate to parent (as implemented here).
-        # The Root overrides this to actually notify the observers.
-        node = self if node is None else node
-        parent = self.parent()
-        assert parent is not None
-        parent._end_insert_children(start, stop, node)
-
-    def _begin_remove_children(
-        self, start: int, stop: int, node: "Node | None" = None
-    ) -> None:
-        # Notify observers that a node (default: this node) is about to have
-        # children removed.
-        # Non-root nodes just propagate to parent (as implemented here).
-        # The Root overrides this to actually notify the observers.
-        node = self if node is None else node
-        parent = self.parent()
-        assert parent is not None
-        parent._begin_remove_children(start, stop, node)
-
-    def _end_remove_children(
-        self, start: int, stop: int, node: "Node | None" = None
-    ) -> None:
-        # Notify observers that a node (default: this node) has had children
-        # removed.
-        # Non-root nodes just propagate to parent (as implemented here).
-        # The Root overrides this to actually notify the observers.
-        node = self if node is None else node
-        parent = self.parent()
-        assert parent is not None
-        parent._end_remove_children(start, stop, node)
-
-    def _data_changed(self, node: "Node | None" = None) -> None:
-        # Notify observers that the data of a node (default: this node) has
-        # changed.
-        # Non-root nodes just propagate to parent (as implemented here).
-        # The Root overrides this to actually notify the observers.
-        node = self if node is None else node
-        parent = self.parent()
-        assert parent is not None
-        parent._data_changed(node)
+    def _data_changed(self) -> None:
+        self._notify(lambda o: o.data_changed(self))
 
 
 class Observer:
@@ -948,39 +902,6 @@ class Root(Node):
                 node.create_task(name)
 
     @override
-    def _begin_insert_children(
-        self, start: int, stop: int, node: Node | None = None
-    ) -> None:
-        node = self if node is None else node
+    def _notify(self, fn: "Callable[[Observer], None]") -> None:
         for o in self._observers:
-            o.nodes_about_to_be_inserted(node, start, stop)
-
-    @override
-    def _end_insert_children(
-        self, start: int, stop: int, node: Node | None = None
-    ) -> None:
-        node = self if node is None else node
-        for o in self._observers:
-            o.nodes_inserted(node, start, stop)
-
-    @override
-    def _begin_remove_children(
-        self, start: int, stop: int, node: Node | None = None
-    ) -> None:
-        node = self if node is None else node
-        for o in self._observers:
-            o.nodes_about_to_be_removed(node, start, stop)
-
-    @override
-    def _end_remove_children(
-        self, start: int, stop: int, node: Node | None = None
-    ) -> None:
-        node = self if node is None else node
-        for o in self._observers:
-            o.nodes_removed(node, start, stop)
-
-    @override
-    def _data_changed(self, node: Node | None = None) -> None:
-        node = self if node is None else node
-        for o in self._observers:
-            o.data_changed(node)
+            fn(o)

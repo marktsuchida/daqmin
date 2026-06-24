@@ -1,4 +1,4 @@
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from enum import Enum
 import time
 from typing import Any, final, override
@@ -107,15 +107,11 @@ class Node:
         self._children.remove(child)
         self._end_remove_children(start, stop)
 
-    def accept(self, visitor: "Visitor") -> None:
-        """
-        Accept a visitor for a depth-first, pre-order traversal.
-
-        This default implementation just makes the visitor visit all children.
-        Subclasses may override to accept the visitor before calling super().
-        """
+    def walk(self) -> Iterator["Node"]:
+        """Yield this node and all descendants, pre-order."""
+        yield self
         for child in self.children():
-            child.accept(visitor)
+            yield from child.walk()
 
     def _begin_insert_children(
         self, start: int, stop: int, node: "Node | None" = None
@@ -174,25 +170,6 @@ class Node:
         parent = self.parent()
         assert parent is not None
         parent._data_changed(node)
-
-
-class Visitor:
-    """Node visitor interface."""
-
-    def visit_attribute(self, node: "Attribute") -> None:
-        pass
-
-    def visit_devices(self, node: "Devices") -> None:
-        pass
-
-    def visit_task(self, node: "Task") -> None:
-        pass
-
-    def visit_tasks(self, node: "Tasks") -> None:
-        pass
-
-    def visit_channels(self, node: "Channels") -> None:
-        pass
 
 
 class Observer:
@@ -339,10 +316,6 @@ class Attribute(Node):
     def is_writable(self) -> bool:
         return self._metadata["settable"]
 
-    @override
-    def accept(self, visitor: Visitor) -> None:
-        visitor.visit_attribute(self)
-
 
 class TaskCompleteAttribute(Attribute):
     """A task's 'complete' attribute."""
@@ -434,10 +407,11 @@ class Channels(Node):
     def _refresh_task_attributes(self) -> None:
         _refresh_task_attributes(self)
 
-    @override
-    def accept(self, visitor: Visitor) -> None:
-        visitor.visit_channels(self)
-        super().accept(visitor)
+
+def _invalidate_attribute_caches(subtree: Node) -> None:
+    for node in subtree.walk():
+        if isinstance(node, Attribute):
+            node.invalidate_cache()
 
 
 def _refresh_task_attributes(node: Node) -> None:
@@ -445,13 +419,7 @@ def _refresh_task_attributes(node: Node) -> None:
     while ancestor is not None and not isinstance(ancestor, Task):
         ancestor = ancestor.parent()
     assert ancestor is not None
-
-    class _Refresher(Visitor):
-        @override
-        def visit_attribute(self, node: Attribute) -> None:
-            node.invalidate_cache()
-
-    ancestor.accept(_Refresher())
+    _invalidate_attribute_caches(ancestor)
 
 
 class PhysChan(Node):
@@ -656,11 +624,6 @@ class Devices(Node):
     @override
     def name(self) -> str:
         return f"{self._name} ({self.num_children()})"
-
-    @override
-    def accept(self, visitor: Visitor) -> None:
-        visitor.visit_devices(self)
-        super().accept(visitor)
 
     def refresh(self) -> None:
         # For now, don't bother preserving existing devices, even if none of
@@ -888,11 +851,6 @@ class Task(Node):
     def name(self) -> str:
         return self._daqmx_task.name
 
-    @override
-    def accept(self, visitor: Visitor) -> None:
-        visitor.visit_task(self)
-        super().accept(visitor)
-
     def control(self, action: nidaqmx.constants.TaskMode) -> None:
         self._daqmx_task.control(action)
         _refresh_task_attributes(self)
@@ -910,11 +868,6 @@ class Tasks(Node):
     @override
     def name(self) -> str:
         return f"Tasks ({self.num_children()})"
-
-    @override
-    def accept(self, visitor: Visitor) -> None:
-        visitor.visit_tasks(self)
-        super().accept(visitor)
 
     def create_task(self, name: str) -> None:
         task = Task(nidaqmx.task.Task(name), self)
@@ -977,36 +930,22 @@ class Root(Node):
         self._observers.remove(observer)
 
     def clean_up(self) -> None:
-        class CleanerUpper(Visitor):
-            @override
-            def visit_task(self, node: Task) -> None:
+        for node in self.walk():
+            if isinstance(node, Task):
                 node.clear_task()
 
-        self.accept(CleanerUpper())
-
     def refresh_attributes(self) -> None:
-        class AttributeRefresher(Visitor):
-            @override
-            def visit_attribute(self, node: Attribute) -> None:
-                node.invalidate_cache()
-
-        self.accept(AttributeRefresher())
+        _invalidate_attribute_caches(self)
 
     def refresh_devices(self) -> None:
-        class DeviceRefresher(Visitor):
-            @override
-            def visit_devices(self, node: Devices) -> None:
+        for node in self.walk():
+            if isinstance(node, Devices):
                 node.refresh()
 
-        self.accept(DeviceRefresher())
-
     def create_task(self, name: str) -> None:
-        class TaskCreator(Visitor):
-            @override
-            def visit_tasks(self, node: Tasks) -> None:
+        for node in self.walk():
+            if isinstance(node, Tasks):
                 node.create_task(name)
-
-        self.accept(TaskCreator())
 
     @override
     def _begin_insert_children(

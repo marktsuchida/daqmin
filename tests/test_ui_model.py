@@ -126,6 +126,44 @@ def test_item_model_first_level_insert(qtmodeltester):
     assert model.rowCount(model.index(0, 0, QModelIndex())) == 1
 
 
+class _NamedNode(data_model.Node):
+    def __init__(
+        self, name: str, children: tuple[data_model.Node, ...] = ()
+    ) -> None:
+        super().__init__(None, children)
+        for c in children:
+            c._parent = self
+        self._name = name
+
+    @override
+    def name(self) -> str:
+        return self._name
+
+
+def test_node_walk_preorder():
+    grand00 = _NamedNode("grand00")
+    grand01 = _NamedNode("grand01")
+    grand10 = _NamedNode("grand10")
+    child0 = _NamedNode("child0", (grand00, grand01))
+    child1 = _NamedNode("child1", (grand10,))
+    root = _NamedNode("root", (child0, child1))
+
+    names = [node.name() for node in root.walk()]
+    assert names == [
+        "root",
+        "child0",
+        "grand00",
+        "grand01",
+        "child1",
+        "grand10",
+    ]
+
+
+def test_node_walk_leaf():
+    leaf = _NamedNode("leaf")
+    assert [node.name() for node in leaf.walk()] == ["leaf"]
+
+
 def test_attribute_value_unsupported_error_code():
     v_ok = data_model.AttributeValue(value=42)
     assert v_ok.unsupported_error_code() is None
